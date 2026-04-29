@@ -1,0 +1,100 @@
+{
+  "common": {
+    "welcome": "レストランシステムへようこそ",
+    "login": "ログイン",
+    "logout": "ログアウト",
+    "home": "ホーム",
+    "menu": "メニュー",
+    "order": "注文",
+    "invoice": "請求書",
+    "language": "言語",
+    "bestSellers": "人気メニュー",
+    "themeRules": "テーマ・ルール",
+    "loading": "読み込み中..."
+  },
+  "auth": {
+    "username": "ユーザー名",
+    "password": "パスワード",
+    "signIn": "サインイン",
+    "signUp": "新規登録",
+    "signOut": "サインアウト",
+    "createAccount": "アカウント作成",
+    "fullName": "氏名",
+    "phoneNumber": "電話番号",
+    "email": "メール",
+    "confirmPassword": "パスワード確認",
+    "gender": "性別",
+    "address": "住所",
+    "show": "表示",
+    "hide": "非表示",
+    "male": "男性",
+    "female": "女性",
+    "other": "その他",
+    "close": "閉じる",
+    "signInTitle": "夜のテーブルへようこそ",
+    "signUpTitle": "Per's Food アカウントを開く",
+    "passwordMismatch": "パスワードが一致しません。",
+    "invalidCredentials": "メールまたはパスワードが正しくありません。",
+    "emailExists": "そのメールアドレスは既に登録されています。",
+    "welcomeBackMessage": "おかえりなさい、{name}",
+    "phoneError": "電話番号またはパスワードが正しくありません",
+    "accountCreatedMessage": "アカウントを作成しました。ようこそ。",
+    "unableCreateAccount": "アカウントを作成できませんでした。"
+  },
+  "hero": {
+    "eyebrow": "Per's Food / ネオンダイニング",
+    "title": "Per's Food で夜はもっと熱くなる",
+    "subtitle": "GSAP の動き、重なり合うカード、そしてスクロールに合わせて横へ流れる人気メニューで、ドラマのあるトップページにしています。",
+    "panelOneTitle": "私たちは信じるものだけを出します。",
+    "panelOneBody": "暗い漆、キャンドルの灯り、そして意図された動きが一つひとつの瞬間を形作ります。",
+    "panelTwoTitle": "食材が最優先です。",
+    "panelTwoBody": "季節の層が、印象に残るよう設計されたゆっくりとした贅沢なリズムで届きます。",
+    "ctaSecondary": "人気メニューへ",
+    "badge": "ヒーロースポットライト",
+    "spark": "テーブルごとに歓声を",
+    "greeting": "おかえりなさい",
+    "statsLanguages": "ヒーローの言語数",
+    "statsDishes": "看板メニュー",
+    "statsNight": "深夜の熱量"
+  },
+  "bestSellers": {
+    "title": "スポットライトを奪う人気メニュー",
+    "subtitle": "下へスクロールすると、横に滑るラインで厨房の人気者が次々と現れます。"
+  },
+  "menu": {
+    "coverTitle": "メニュー",
+    "categories": "カテゴリ",
+    "pageTitle": "メニュー",
+    "dishesInCategory": "品目",
+    "previousCategory": "前のカテゴリ",
+    "nextCategory": "次のカテゴリ",
+    "addToOrder": "注文に追加"
+  },
+  "reserve": {
+    "eyebrow": "予約",
+    "title": "今夜の席を予約する",
+    "fullName": "氏名",
+    "phoneNumber": "電話番号",
+    "date": "日付",
+    "time": "時間",
+    "guests": "人数",
+    "notes": "メモ",
+    "confirmReservation": "予約を確定",
+    "sending": "送信中...",
+    "confirmed": "確定済み",
+    "yourTableAwaits": "お席をご用意しています。",
+    "contactSoon": "詳細についてはまもなくご連絡します。",
+    "backToMenu": "メニューへ戻る",
+    "success": "お席をご用意しています。まもなくご連絡します。",
+    "error": "予約を作成できませんでした。"
+  },
+  "theme": {
+    "title": "Yakuza 風のテーマルール",
+    "subtitle": "暗い漆黒、深い赤、金の光でまとめ、どのパネルもネオンの路地のように見せています。"
+  },
+  "footer": {
+    "kicker": "Per's Food / 夜のあかり",
+    "tagline": "大胆な料理、鋭い動き、そして開いた瞬間から印象に残るホームページ。",
+    "note": "深夜の客席へ、スタイルと一緒に。"
+  }
+}

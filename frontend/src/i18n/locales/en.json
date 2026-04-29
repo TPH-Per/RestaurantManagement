@@ -1,0 +1,100 @@
+{
+  "common": {
+    "welcome": "Welcome to Restaurant System",
+    "login": "Login",
+    "logout": "Logout",
+    "home": "Home",
+    "menu": "Menu",
+    "order": "Order",
+    "invoice": "Invoice",
+    "language": "Language",
+    "bestSellers": "Best Sellers",
+    "themeRules": "Theme Rules",
+    "loading": "Loading..."
+  },
+  "auth": {
+    "username": "Username",
+    "password": "Password",
+    "signIn": "Sign In",
+    "signUp": "Sign Up",
+    "signOut": "Sign Out",
+    "createAccount": "Create Account",
+    "fullName": "Full Name",
+    "phoneNumber": "Phone number",
+    "email": "Email",
+    "confirmPassword": "Confirm Password",
+    "gender": "Gender",
+    "address": "Address",
+    "show": "Show",
+    "hide": "Hide",
+    "male": "Male",
+    "female": "Female",
+    "other": "Other",
+    "close": "Close",
+    "signInTitle": "Welcome back to the night table",
+    "signUpTitle": "Open your Per's Food account",
+    "passwordMismatch": "Passwords do not match.",
+    "invalidCredentials": "Invalid email or password.",
+    "emailExists": "That email already has an account.",
+    "welcomeBackMessage": "Welcome back, {name}",
+    "phoneError": "Phone number or password is incorrect",
+    "accountCreatedMessage": "Account created! Welcome.",
+    "unableCreateAccount": "Unable to create account."
+  },
+  "hero": {
+    "eyebrow": "Per's Food / Neon dining",
+    "title": "The night gets louder at Per's Food",
+    "subtitle": "A bold Japanese-night-market landing page with cinematic motion, layered cards, and a best-seller rail that slides with your scroll.",
+    "panelOneTitle": "We serve only what we believe in.",
+    "panelOneBody": "Dark lacquer, candlelight, and deliberate motion frame every moment.",
+    "panelTwoTitle": "Ingredients first.",
+    "panelTwoBody": "Seasonal layers arrive in a slow luxury rhythm built to impress.",
+    "ctaSecondary": "Slide to best sellers",
+    "badge": "Hero spotlight",
+    "spark": "Cheer with every table",
+    "greeting": "Welcome back",
+    "statsLanguages": "Languages in the hero",
+    "statsDishes": "Signature dishes",
+    "statsNight": "Late-night energy"
+  },
+  "bestSellers": {
+    "title": "Best sellers that steal the spotlight",
+    "subtitle": "Scroll down to push the row sideways and reveal the kitchen's loudest favorites."
+  },
+  "menu": {
+    "coverTitle": "MENU",
+    "categories": "Categories",
+    "pageTitle": "Menu",
+    "dishesInCategory": "dishes in this category",
+    "previousCategory": "Previous Category",
+    "nextCategory": "Next Category",
+    "addToOrder": "Add to Order"
+  },
+  "reserve": {
+    "eyebrow": "Reservation",
+    "title": "Book your night",
+    "fullName": "Full Name",
+    "phoneNumber": "Phone number",
+    "date": "Date",
+    "time": "Time",
+    "guests": "Guests",
+    "notes": "Notes",
+    "confirmReservation": "Confirm Reservation",
+    "sending": "Sending...",
+    "confirmed": "Confirmed",
+    "yourTableAwaits": "Your table awaits.",
+    "contactSoon": "We'll contact you shortly with the final details.",
+    "backToMenu": "Back to Menu",
+    "success": "Your table awaits. We'll contact you shortly.",
+    "error": "Unable to create reservation."
+  },
+  "theme": {
+    "title": "Yakuza-inspired theme rules",
+    "subtitle": "The whole frontend leans into dark lacquer, crimson glow, and golden highlights so every panel feels like a neon alley scene."
+  },
+  "footer": {
+    "kicker": "Per's Food / After dark",
+    "tagline": "Bold plates, sharp motion, and a homepage built to impress the moment it loads.",
+    "note": "Serving the midnight crowd with style."
+  }
+}

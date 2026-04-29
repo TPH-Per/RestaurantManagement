@@ -1,0 +1,100 @@
+{
+  "common": {
+    "welcome": "Chào mừng đến với Hệ thống Nhà hàng",
+    "login": "Đăng nhập",
+    "logout": "Đăng xuất",
+    "home": "Trang chủ",
+    "menu": "Thực đơn",
+    "order": "Đặt món",
+    "invoice": "Hóa đơn",
+    "language": "Ngôn ngữ",
+    "bestSellers": "Món bán chạy",
+    "themeRules": "Quy tắc chủ đề",
+    "loading": "Đang tải..."
+  },
+  "auth": {
+    "username": "Tên đăng nhập",
+    "password": "Mật khẩu",
+    "signIn": "Đăng nhập",
+    "signUp": "Đăng ký",
+    "signOut": "Đăng xuất",
+    "createAccount": "Tạo tài khoản",
+    "fullName": "Họ và tên",
+    "phoneNumber": "Số điện thoại",
+    "email": "Email",
+    "confirmPassword": "Xác nhận mật khẩu",
+    "gender": "Giới tính",
+    "address": "Địa chỉ",
+    "show": "Hiện",
+    "hide": "Ẩn",
+    "male": "Nam",
+    "female": "Nữ",
+    "other": "Khác",
+    "close": "Đóng",
+    "signInTitle": "Chào mừng quay lại bàn tiệc đêm",
+    "signUpTitle": "Mở tài khoản Per's Food",
+    "passwordMismatch": "Mật khẩu không khớp.",
+    "invalidCredentials": "Email hoặc mật khẩu không hợp lệ.",
+    "emailExists": "Email này đã có tài khoản.",
+    "welcomeBackMessage": "Chào mừng quay lại, {name}",
+    "phoneError": "Số điện thoại hoặc mật khẩu không đúng",
+    "accountCreatedMessage": "Tạo tài khoản thành công! Chào mừng bạn.",
+    "unableCreateAccount": "Không thể tạo tài khoản."
+  },
+  "hero": {
+    "eyebrow": "Per's Food / Ẩm thực neon",
+    "title": "Đêm rực sáng hơn tại Per's Food",
+    "subtitle": "Trang chủ mang cảm hứng phố đêm Nhật Bản với chuyển động GSAP, thẻ lớp chồng, và dải món bán chạy trượt theo cuộn trang.",
+    "panelOneTitle": "Chúng tôi chỉ phục vụ điều mình tin tưởng.",
+    "panelOneBody": "Lớp sơn tối, ánh nến và chuyển động có chủ ý định hình từng khoảnh khắc.",
+    "panelTwoTitle": "Ưu tiên nguyên liệu.",
+    "panelTwoBody": "Các lớp hương theo mùa đến theo nhịp sang trọng chậm rãi để gây ấn tượng.",
+    "ctaSecondary": "Kéo xuống xem món bán chạy",
+    "badge": "Điểm nhấn hero",
+    "spark": "Cùng nâng ly với mọi bàn ăn",
+    "greeting": "Chào mừng trở lại",
+    "statsLanguages": "Ngôn ngữ trong hero",
+    "statsDishes": "Món đặc trưng",
+    "statsNight": "Năng lượng đêm muộn"
+  },
+  "bestSellers": {
+    "title": "Món bán chạy chiếm trọn spotlight",
+    "subtitle": "Kéo xuống để dải món trượt ngang và lộ ra những món được gọi nhiều nhất."
+  },
+  "menu": {
+    "coverTitle": "THỰC ĐƠN",
+    "categories": "Danh mục",
+    "pageTitle": "Thực đơn",
+    "dishesInCategory": "món trong danh mục này",
+    "previousCategory": "Danh mục trước",
+    "nextCategory": "Danh mục tiếp",
+    "addToOrder": "Thêm vào đơn"
+  },
+  "reserve": {
+    "eyebrow": "Đặt chỗ",
+    "title": "Đặt bàn cho đêm nay",
+    "fullName": "Họ và tên",
+    "phoneNumber": "Số điện thoại",
+    "date": "Ngày",
+    "time": "Giờ",
+    "guests": "Số khách",
+    "notes": "Ghi chú",
+    "confirmReservation": "Xác nhận đặt bàn",
+    "sending": "Đang gửi...",
+    "confirmed": "Đã xác nhận",
+    "yourTableAwaits": "Bàn của bạn đang chờ.",
+    "contactSoon": "Chúng tôi sẽ sớm liên hệ với bạn để xác nhận chi tiết.",
+    "backToMenu": "Quay lại thực đơn",
+    "success": "Bàn của bạn đang chờ. Chúng tôi sẽ sớm liên hệ với bạn.",
+    "error": "Không thể tạo đặt chỗ."
+  },
+  "theme": {
+    "title": "Quy tắc giao diện lấy cảm hứng Yakuza",
+    "subtitle": "Toàn bộ frontend theo tinh thần nền tối, ánh đỏ rực và điểm nhấn vàng để mọi khung nhìn như một con hẻm neon."
+  },
+  "footer": {
+    "kicker": "Per's Food / Đêm muộn",
+    "tagline": "Món đậm vị, chuyển động sắc nét, và một homepage tạo ấn tượng ngay khi mở lên.",
+    "note": "Phục vụ khách đêm bằng phong cách riêng."
+  }
+}

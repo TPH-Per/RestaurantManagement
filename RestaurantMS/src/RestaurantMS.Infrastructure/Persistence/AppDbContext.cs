@@ -1,11 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using System.Reflection;
-using RestaurantMS.Application.Common.Interfaces;
 using RestaurantMS.Domain.Entities;
 
 namespace RestaurantMS.Infrastructure.Persistence;
 
-public class AppDbContext : DbContext, IApplicationDbContext
+public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 

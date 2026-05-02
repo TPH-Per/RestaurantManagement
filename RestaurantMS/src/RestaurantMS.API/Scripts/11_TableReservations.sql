@@ -1,0 +1,1 @@
+CREATE TABLE TableReservations ( reservation_id BIGINT IDENTITY(1,1) PRIMARY KEY, customer_id BIGINT NOT NULL, table_id BIGINT NOT NULL, reserved_at DATETIME2 NOT NULL, guest_count INT NOT NULL, notes NVARCHAR(500), status NVARCHAR(20) NOT NULL );

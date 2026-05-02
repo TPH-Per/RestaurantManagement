@@ -1,8 +1,9 @@
-namespace RestaurantMS.Domain.Exceptions;
+using System;
 
-public class DomainException : Exception
+namespace RestaurantMS.Domain.Exceptions
 {
-    public DomainException(string message) : base(message)
+    public class DomainException : Exception
     {
+        public DomainException(string message) : base(message) { }
     }
 }

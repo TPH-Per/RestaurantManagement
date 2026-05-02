@@ -1,0 +1,1 @@
+CREATE TABLE Customers ( customer_id BIGINT IDENTITY(1,1) PRIMARY KEY, phone NVARCHAR(20) NOT NULL, full_name NVARCHAR(100) NOT NULL, email NVARCHAR(100), password NVARCHAR(100) NOT NULL, address NVARCHAR(255), gender NVARCHAR(10), membership_level NVARCHAR(20) NOT NULL, loyalty_points INT NOT NULL, created_at DATETIME2 NOT NULL );

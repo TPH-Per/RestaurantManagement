@@ -1,0 +1,1 @@
+CREATE TABLE RestaurantOrders ( order_id BIGINT IDENTITY(1,1) PRIMARY KEY, table_id BIGINT NOT NULL, reservation_id BIGINT, customer_id BIGINT, status NVARCHAR(20) NOT NULL, created_at DATETIME2 NOT NULL );

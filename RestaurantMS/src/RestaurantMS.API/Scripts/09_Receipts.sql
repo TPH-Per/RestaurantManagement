@@ -1,0 +1,1 @@
+CREATE TABLE Receipts ( receipt_id BIGINT IDENTITY(1,1) PRIMARY KEY, manufacturer_id BIGINT NOT NULL, staff_id BIGINT NOT NULL, imported_at DATETIME2 NOT NULL );

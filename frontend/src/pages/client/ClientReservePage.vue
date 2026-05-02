@@ -1,3 +1,8 @@
+import { categoryService } from '@/services/category.service';
+import { menuService } from '@/services/menu.service';
+import { orderService } from '@/services/order.service';
+import { reservationService } from '@/services/reservation.service';
+import { invoiceService } from '@/services/invoice.service';
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'

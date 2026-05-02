@@ -1,125 +1,50 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import gsap from 'gsap'
-import { useReservation, useAuth, useCustomer, useMenuItem, useTable, useOrder, useUser, useCategory, useSupplier, usePurchaseOrder, useInventoryItem, useOrderItem, useInvoice, usePayment, useShift, useFb, useDiscounts, useStaff, useManufacturers, useReceipts, useDashboard, useReviews } from '@/composables/useAll'
-import { toast } from '../../services/toast'
-import { useClientAuthStore } from '../../stores/clientAuth'
-import { useReservationStore } from '../../stores/reservation'
+import { useOrder }       from '@/composables/useOrder'
+import { useMenu }        from '@/composables/useMenu'
+import { useReservation } from '@/composables/useReservation'
+import { canCreateOrder } from '@/domain/rules/reservation.rules'
+import { isSellable }     from '@/domain/rules/fb.rules'
+import { useNotificationStore } from '@/stores/notification.store'
+import type { FB } from '@/domain/entities/fb.entity'
 
 const props = defineProps({ tableId: { type: String, required: true } })
-const route = useRoute()
-const router = useRouter()
-const auth = useClientAuthStore()
-const reservationStore = useReservationStore()
-const order = ref(null)
-const confirmOpen = ref(false)
-const reservation = ref(null)
-const menuItems = ref([])
-const searchQuery = ref('')
+const route   = useRoute()
+const router  = useRouter()
+const notify  = useNotificationStore()
 
-const subtotal = computed(() => order.value?.subtotal || 0)
-const total = computed(() => subtotal.value)
-const filteredMenuItems = computed(() => {
-  const query = searchQuery.value.trim().toLowerCase()
-  if (!query) return menuItems.value
-  return menuItems.value.filter((item) => item.name.toLowerCase().includes(query))
-})
+const menu        = useMenu()
+const reservation = useReservation()
+const order       = useOrder()
 
-const loadMenu = async () => {
-  menuItems.value = await useFb().list({ type: 'All' })
-}
-
-const loadReservation = async () => {
-  const reservationId = route.query.reservationId || reservationStore.activeReservation
-  if (!reservationId) {
-    toast.error('Please select a valid reservation first.')
-    router.push('/my-reservations')
-    return null
-  }
-
-  const currentReservation = await useReservation().get(reservationId)
-  if (!currentReservation || currentReservation.status !== 'SERVING') {
-    toast.error('Orders can only be placed for active SERVING sessions.')
-    router.push('/my-reservations')
-    return null
-  }
-
-  reservation.value = currentReservation
-  return currentReservation
-}
-
-const ensureOrder = async () => {
-  const currentReservation = await loadReservation()
-  if (!currentReservation) return null
-
-  if (order.value) return order.value
-
-  const list = await useOrder().list()
-  order.value = list.find((entry) => String(entry.table_id) === String(props.tableId))
-  if (!order.value) {
-    order.value = await useOrder().create({
-      table_id: Number(props.tableId),
-      reservation_id: currentReservation.reservation_id,
-      notes: 'Client order'
-    })
-  }
-  return order.value
-}
-
-const load = async () => {
-  const currentReservation = await loadReservation()
-  if (!currentReservation) return
-
-  const list = await useOrder().list()
-  order.value = list.find((entry) => String(entry.table_id) === String(props.tableId))
-  if (!order.value) {
-    order.value = await useOrder().create({
-      table_id: Number(props.tableId),
-      reservation_id: currentReservation.reservation_id,
-      notes: 'Client order'
-    })
-  }
-}
-
-const requestInvoice = async () => {
-  confirmOpen.value = true
-}
-
-const callWaiter = () => {
-  toast.info('A waiter has been notified')
-}
-
-const confirmInvoice = async () => {
-  try {
-    const invoice = await useInvoice().create({ order_id: order.value.order_id })
-    toast.success('Invoice created.')
-    router.push(`/invoice/${invoice.invoice_id}`)
-  } catch (error) {
-    toast.error(error.message || 'Unable to create invoice.')
-  }
-}
-
-const removeItem = async (row) => {
-  await useOrderItem().remove(row.order_item_id)
-  await load()
-}
-
-const addToOrder = async (item) => {
-  try {
-    const currentOrder = await ensureOrder()
-    if (!currentOrder) return
-    await useOrderItem().add(currentOrder.order_id, { item_id: item.item_id, quantity: 1, notes: '' })
-    toast.success('Added to order.')
-    await load()
-  } catch (error) {
-    toast.error(error.message || 'Unable to add item.')
-  }
-}
+const sellableItems = computed(() => menu.items.value.filter(isSellable))
+const subtotal = order.itemsTotal
 
 onMounted(async () => {
-  await Promise.all([loadMenu(), load()])
+  const reservationId = Number(route.query.reservationId)
+  if (!reservationId) {
+    notify.error('Please select a valid reservation first.')
+    router.push('/my-reservations')
+    return
+  }
+
+  await reservation.loadById(reservationId)
+  const res = reservation.current.value
+
+  if (!res || !canCreateOrder(res)) {
+    notify.error('Orders can only be placed for CONFIRMED reservations.')
+    router.push('/my-reservations')
+    return
+  }
+
+  await menu.loadMenu()
+  await order.create({ tableId: res.tableId, reservationId: res.reservationId })
 })
+
+async function addItem(fb: FB, qty: number) {
+  await order.addItem(fb, qty)
+}
 </script>
 
 <template>

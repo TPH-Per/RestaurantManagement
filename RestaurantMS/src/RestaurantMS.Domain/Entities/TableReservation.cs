@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 
+using RestaurantMS.Domain.Enums;
+
 namespace RestaurantMS.Domain.Entities
 {
     public class TableReservation
@@ -12,7 +14,7 @@ namespace RestaurantMS.Domain.Entities
         public RestaurantTable Table { get; set; } = null!;
         public DateTime ReservedAt { get; set; }
         public int GuestCount { get; set; }
-        public string Status { get; set; } = string.Empty;
+        public ReservationStatus Status { get; set; }
         public string? Notes { get; set; }
         public DateTime CreatedAt { get; set; }
         public ICollection<RestaurantOrder> Orders { get; set; } = new List<RestaurantOrder>();

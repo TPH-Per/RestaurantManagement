@@ -2,7 +2,7 @@ namespace RestaurantMS.Domain.Enums;
 
 public enum StockStatus
 {
-    InStock,
-    LowStock,
-    OutOfStock
+    NORMAL,
+    LOW_STOCK,
+    OUT_OF_STOCK
 }

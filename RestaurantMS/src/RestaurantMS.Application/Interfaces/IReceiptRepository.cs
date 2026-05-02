@@ -11,5 +11,6 @@ public interface IReceiptRepository
     Task AddAsync(Receipt entity);
     Task UpdateAsync(Receipt entity);
     Task DeleteAsync(long id);
+    Task<Receipt?> GetWithDetailsAsync(long receiptId);
+    Task<long> InsertAndReturnIdAsync(Receipt receipt);
 }
-

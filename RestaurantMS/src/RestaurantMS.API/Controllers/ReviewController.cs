@@ -1,18 +1,27 @@
 using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Features.Review.Queries;
+using RestaurantMS.Application.Features.Review.Commands.CreateReview;
 
 namespace RestaurantMS.API.Controllers;
 
+[Route("api/reviews")]
 [ApiController]
-[Route("api/[controller]")]
+[Authorize(Policy = "CustomerOnly")]
 public class ReviewController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    public ReviewController(IMediator mediator) { _mediator = mediator; }
+
+    private readonly IMediator _m;
+    public ReviewController(IMediator m) => _m = m;
+
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateReviewCommand cmd, CancellationToken ct) 
+        => Ok(await _m.Send(cmd, ct));
 
     [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
+    [Authorize(Policy = "StaffOnly")]
+    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _m.Send(new GetAllReviewsQuery(), ct));
 }
-

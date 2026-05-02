@@ -1,4 +1,2877 @@
-﻿## File: backend\Program.cs
+﻿## File: apply_frontend.js
+`$language
+const fs = require('fs');
+const path = require('path');
+
+const content = fs.readFileSync('steps.txt', 'utf-8');
+
+function extractAndWrite(pattern, filepath) {
+    const match = content.match(pattern);
+    if (match && match[1]) {
+        const fullPath = path.join('RestaurantMS/src', filepath) // wait, frontend is in root/frontend
+        const realPath = path.join('frontend', filepath.replace('frontend/', ''));
+        fs.mkdirSync(path.dirname(realPath), { recursive: true });
+        fs.writeFileSync(realPath, match[1].trim());
+        console.log('Wrote ' + realPath);
+    }
+}
+
+// Write enums
+extractAndWrite(/frontend\/src\/domain\/enums\/index\.ts\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/domain/enums/index.ts');
+
+// Write entities
+extractAndWrite(/frontend\/src\/domain\/entities\/fb\.entity\.ts\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/domain/entities/fb.entity.ts');
+extractAndWrite(/frontend\/src\/domain\/entities\/order\.entity\.ts\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/domain/entities/order.entity.ts');
+extractAndWrite(/frontend\/src\/domain\/entities\/order-item\.entity\.ts\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/domain/entities/order-item.entity.ts');
+extractAndWrite(/frontend\/src\/domain\/entities\/invoice\.entity\.ts\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/domain/entities/invoice.entity.ts');
+extractAndWrite(/frontend\/src\/domain\/entities\/table-reservation\.entity\.ts\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/domain/entities/table-reservation.entity.ts');
+
+// Write rules
+extractAndWrite(/frontend\/src\/domain\/rules\/fb\.rules\.ts.*?import(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/domain/rules/fb.rules.ts');
+extractAndWrite(/frontend\/src\/domain\/rules\/order\.rules\.ts\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/domain/rules/order.rules.ts');
+extractAndWrite(/frontend\/src\/domain\/rules\/invoice\.rules\.ts\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/domain/rules/invoice.rules.ts');
+extractAndWrite(/frontend\/src\/domain\/rules\/reservation\.rules\.ts\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/domain/rules/reservation.rules.ts');
+
+// Write services
+extractAndWrite(/frontend\/src\/services\/api\.client\.ts\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/services/api.client.ts');
+extractAndWrite(/frontend\/src\/services\/auth\.service\.ts\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/services/auth.service.ts');
+extractAndWrite(/frontend\/src\/services\/order\.service\.ts\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/services/order.service.ts');
+
+// Write stores
+extractAndWrite(/frontend\/src\/stores\/auth\.store\.ts\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/stores/auth.store.ts');
+extractAndWrite(/frontend\/src\/stores\/notification\.store\.ts\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/stores/notification.store.ts');
+
+// Write composables
+extractAndWrite(/frontend\/src\/composables\/useOrder\.ts\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/composables/useOrder.ts');
+
+// Write router guards
+extractAndWrite(/frontend\/src\/router\/guards\.ts\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/router/guards.ts');
+extractAndWrite(/frontend\/src\/pages\/client\/ClientOrderPage\.vue\n.*?AFTER.*?:\n(.*?)`\n\n===/s, 'src/pages/client/ClientOrderPage.vue');
+extractAndWrite(/frontend\/src\/pages\/client\/ClientLoginPage\.vue\n.*?AFTER:\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/pages/client/ClientLoginPage.vue');
+extractAndWrite(/frontend\/src\/components\/features\/ReviewForm\.vue\n(.*?)(?=\n\/\/ frontend|\n===)/s, 'src/components/features/ReviewForm.vue');
+
+// Special fix for fb.rules.ts since the match might miss "import"
+const fbRulesMatch = content.match(/frontend\/src\/domain\/rules\/fb\.rules\.ts.*?(\nimport.*?(?=\n\/\/ frontend|\n===))/s);
+if (fbRulesMatch && fbRulesMatch[1]) {
+    fs.writeFileSync('frontend/src/domain/rules/fb.rules.ts', fbRulesMatch[1].trim());
+}
+
+// Special fix for ClientOrderPage.vue
+const orderPageMatch = content.match(/<script setup lang="ts">.*?<\/script>/s);
+if (orderPageMatch) {
+    fs.writeFileSync('frontend/src/pages/client/ClientOrderPage.vue', orderPageMatch[0].trim());
+}
+
+``n
+
+## File: apply_frontend2.js
+`$language
+const fs = require('fs');
+const path = require('path');
+
+const content = fs.readFileSync('steps.txt', 'utf-8');
+const lines = content.split('\n');
+
+let currentFile = null;
+let currentContent = [];
+
+for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // Look for comments indicating a file path with an extension
+    const fileMatch = line.match(/\/\/\s*(frontend\/src\/[^\s]+\.(?:ts|vue))/);
+    
+    // Special check for ClientOrderPage and others that might not have a comment exactly matching
+    // Actually, all of them have comments in steps.txt like:
+    // // frontend/src/pages/client/ClientOrderPage.vue
+    
+    if (fileMatch) {
+        // Save previous file if exists
+        if (currentFile && currentContent.length > 0) {
+            const realPath = path.join(__dirname, currentFile);
+            fs.mkdirSync(path.dirname(realPath), { recursive: true });
+            
+            // Clean up any remaining trailing lines or === markers
+            let text = currentContent.join('\n').trim();
+            if (text.startsWith('// BUG')) {
+                // Remove the bug explanation part for ClientOrderPage.vue
+                text = text.replace(/\/\/ BUG.*?(?=<script)/s, '').trim();
+            }
+            
+            fs.writeFileSync(realPath, text);
+            console.log('Wrote ' + currentFile);
+        }
+        
+        currentFile = fileMatch[1];
+        currentContent = [];
+        continue;
+    }
+    
+    if (currentFile) {
+        if (line.startsWith('=== ')) {
+            // Ignore headers
+        } else {
+            currentContent.push(line);
+        }
+    }
+}
+
+if (currentFile && currentContent.length > 0) {
+    const realPath = path.join(__dirname, currentFile);
+    fs.mkdirSync(path.dirname(realPath), { recursive: true });
+    
+    let text = currentContent.join('\n').trim();
+    if (text.startsWith('// BUG')) {
+        text = text.replace(/\/\/ BUG.*?(?=<script)/s, '').trim();
+    }
+    
+    fs.writeFileSync(realPath, text);
+    console.log('Wrote ' + currentFile);
+}
+
+``n
+
+## File: apply_phase1.js
+`$language
+const fs = require('fs');
+const path = require('path');
+
+function ensureDir(dir) {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+function writeFile(filePath, content) {
+    ensureDir(path.dirname(filePath));
+    fs.writeFileSync(filePath, content.trim() + '\n');
+    console.log(`Wrote ${filePath}`);
+}
+
+const basePath = 'RestaurantMS/src';
+
+// 1. DiscountCodeController
+writeFile(`${basePath}/RestaurantMS.API/Controllers/DiscountCodeController.cs`, `
+using Microsoft.AspNetCore.Mvc;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Features.DiscountCode.Commands;
+using RestaurantMS.Application.Features.DiscountCode.Queries;
+
+namespace RestaurantMS.API.Controllers;
+
+[Route("api/discount-codes")]
+[ApiController]
+public class DiscountCodeController : ControllerBase
+{
+    private readonly IMediator _m;
+    public DiscountCodeController(IMediator m) => _m = m;
+
+    [HttpPost]
+    [Authorize(Policy = "ManagerOnly")]
+    public async Task<IActionResult> Create([FromBody] CreateDiscountCodeCommand cmd, CancellationToken ct)
+        => Ok(await _m.Send(cmd, ct));
+
+    [HttpPut("{id}/toggle")]
+    [Authorize(Policy = "ManagerOnly")]
+    public async Task<IActionResult> Toggle(long id, CancellationToken ct)
+        => Ok(await _m.Send(new ToggleDiscountCodeCommand(id), ct));
+
+    [HttpGet("validate/{code}")]
+    [Authorize(Policy = "StaffOnly")]
+    public async Task<IActionResult> Validate(string code, CancellationToken ct)
+        => Ok(await _m.Send(new ValidateDiscountCodeQuery(code), ct));
+
+    [HttpGet]
+    [Authorize(Policy = "StaffOnly")]
+    public async Task<IActionResult> GetAll(CancellationToken ct)
+        => Ok(await _m.Send(new GetDiscountCodesQuery(), ct));
+}
+`);
+
+// 2. DiscountCode Features
+writeFile(`${basePath}/RestaurantMS.Application/Features/DiscountCode/Queries/ValidateDiscountCodeQuery.cs`, `
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Domain.Exceptions;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.DiscountCode.Queries;
+
+public record ValidateDiscountCodeQuery(string Code) : IRequest<DiscountCodeDto>;
+public record DiscountCodeDto(
+    long Id, string Code, string DiscountType, decimal Value,
+    decimal? MinOrderAmount, decimal? MaxDiscountAmount,
+    bool IsActive, DateTime ValidTo, int UsedCount, int? UsageLimit);
+
+public class ValidateDiscountCodeQueryHandler : IRequestHandler<ValidateDiscountCodeQuery, DiscountCodeDto>
+{
+    private readonly IUnitOfWork _uow;
+    public ValidateDiscountCodeQueryHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<DiscountCodeDto> Handle(ValidateDiscountCodeQuery req, CancellationToken ct)
+    {
+        var code = await _uow.DiscountCodes.GetByCodeAsync(req.Code)
+            ?? throw new NotFoundException("DiscountCode", req.Code);
+
+        if (!code.IsActive) throw new DomainException("Discount code is not active.");
+        if (code.ValidTo < DateTime.UtcNow) throw new DomainException("Discount code has expired.");
+        if (code.UsageLimit > 0 && code.UsedCount >= code.UsageLimit) throw new DomainException("Discount code usage limit reached.");
+
+        return new DiscountCodeDto(
+            code.DiscountCodeId, code.Code, code.DiscountType, code.DiscountValue,
+            code.MinOrderAmount, code.MaxDiscountAmount,
+            code.IsActive, code.ValidTo, code.UsedCount, code.UsageLimit);
+    }
+}
+`);
+
+writeFile(`${basePath}/RestaurantMS.Application/Features/DiscountCode/Queries/GetDiscountCodesQuery.cs`, `
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.DiscountCode.Queries;
+
+public record GetDiscountCodesQuery() : IRequest<IEnumerable<DiscountCodeDto>>;
+
+public class GetDiscountCodesQueryHandler : IRequestHandler<GetDiscountCodesQuery, IEnumerable<DiscountCodeDto>>
+{
+    private readonly IUnitOfWork _uow;
+    public GetDiscountCodesQueryHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<IEnumerable<DiscountCodeDto>> Handle(GetDiscountCodesQuery req, CancellationToken ct)
+    {
+        var codes = await _uow.DiscountCodes.GetAllAsync();
+        return codes.Select(c => new DiscountCodeDto(c.DiscountCodeId, c.Code, c.DiscountType,
+            c.DiscountValue, c.MinOrderAmount, c.MaxDiscountAmount,
+            c.IsActive, c.ValidTo, c.UsedCount, c.UsageLimit));
+    }
+}
+`);
+
+writeFile(`${basePath}/RestaurantMS.Application/Features/DiscountCode/Commands/CreateDiscountCodeCommand.cs`, `
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Application.Features.DiscountCode.Queries;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.DiscountCode.Commands;
+
+public record CreateDiscountCodeCommand(
+    string Code, string DiscountType, decimal Value,
+    decimal? MinOrderAmount, decimal? MaxDiscountAmount,
+    DateTime ValidFrom, DateTime ValidTo, int? UsageLimit) : IRequest<DiscountCodeDto>;
+
+public class CreateDiscountCodeCommandHandler : IRequestHandler<CreateDiscountCodeCommand, DiscountCodeDto>
+{
+    private readonly IUnitOfWork _uow;
+    public CreateDiscountCodeCommandHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<DiscountCodeDto> Handle(CreateDiscountCodeCommand cmd, CancellationToken ct)
+    {
+        var code = new Domain.Entities.DiscountCode {
+            Code = cmd.Code,
+            DiscountType = cmd.DiscountType,
+            DiscountValue = cmd.Value,
+            MinOrderAmount = cmd.MinOrderAmount,
+            MaxDiscountAmount = cmd.MaxDiscountAmount,
+            ValidFrom = cmd.ValidFrom,
+            ValidTo = cmd.ValidTo,
+            UsageLimit = cmd.UsageLimit,
+            UsedCount = 0,
+            IsActive = true
+        };
+        await _uow.DiscountCodes.AddAsync(code);
+        return new DiscountCodeDto(code.DiscountCodeId, code.Code, code.DiscountType, code.DiscountValue, code.MinOrderAmount, code.MaxDiscountAmount, code.IsActive, code.ValidTo, code.UsedCount, code.UsageLimit);
+    }
+}
+`);
+
+writeFile(`${basePath}/RestaurantMS.Application/Features/DiscountCode/Commands/ToggleDiscountCodeCommand.cs`, `
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Domain.Exceptions;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.DiscountCode.Commands;
+
+public record ToggleDiscountCodeCommand(long Id) : IRequest<Unit>;
+
+public class ToggleDiscountCodeCommandHandler : IRequestHandler<ToggleDiscountCodeCommand, Unit>
+{
+    private readonly IUnitOfWork _uow;
+    public ToggleDiscountCodeCommandHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<Unit> Handle(ToggleDiscountCodeCommand cmd, CancellationToken ct)
+    {
+        var code = await _uow.DiscountCodes.GetByIdAsync(cmd.Id)
+            ?? throw new NotFoundException("DiscountCode", cmd.Id);
+        code.IsActive = !code.IsActive;
+        await _uow.DiscountCodes.UpdateAsync(code);
+        return Unit.Value;
+    }
+}
+`);
+
+``n
+
+## File: apply_phase2_4.js
+`$language
+const fs = require('fs');
+const path = require('path');
+
+const dir = 'RestaurantMS/src/RestaurantMS.Infrastructure/Repositories';
+
+const repos = {
+    'CategoryRepository.cs': `
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class CategoryRepository : BaseRepository, ICategoryRepository
+{
+    public CategoryRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<Category?> GetByIdAsync(long id)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Categories WHERE category_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) return new Category { CategoryId = (int)r.GetInt64(0), Name = r.GetString(1), Type = r.GetString(2) };
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task<IEnumerable<Category>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Categories ORDER BY name";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<Category>();
+            while (await r.ReadAsync()) list.Add(new Category { CategoryId = (int)r.GetInt64(0), Name = r.GetString(1), Type = r.GetString(2) });
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task AddAsync(Category entity) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "INSERT INTO Categories (name, type) VALUES (@Name, @Type)";
+            cmd.Parameters.AddWithValue("@Name", entity.Name);
+            cmd.Parameters.AddWithValue("@Type", entity.Type ?? "FOOD");
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task UpdateAsync(Category entity) {}
+    public async Task DeleteAsync(long id) {}
+}
+`,
+    'ManufacturerRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class ManufacturerRepository : BaseRepository, IManufacturerRepository
+{
+    public ManufacturerRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<Manufacturer?> GetByIdAsync(long id)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Manufacturers WHERE manufacturer_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) return new Manufacturer { ManufacturerId = (int)r.GetInt64(0), Name = r.GetString(1) };
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task<IEnumerable<Manufacturer>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Manufacturers ORDER BY name";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<Manufacturer>();
+            while (await r.ReadAsync()) list.Add(new Manufacturer { ManufacturerId = (int)r.GetInt64(0), Name = r.GetString(1) });
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task AddAsync(Manufacturer entity) {}
+    public async Task UpdateAsync(Manufacturer entity) {}
+    public async Task DeleteAsync(long id) {}
+    public async Task<long> InsertAndReturnIdAsync(Manufacturer entity) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "INSERT INTO Manufacturers (name, address, phone) OUTPUT INSERTED.manufacturer_id VALUES (@Name, @Addr, @Phone)";
+            cmd.Parameters.AddWithValue("@Name", entity.Name);
+            cmd.Parameters.AddWithValue("@Addr",  (object?)entity.Address ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@Phone", (object?)entity.Phone   ?? DBNull.Value);
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+}
+`,
+    'FBRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class FBRepository : BaseRepository, IFBRepository
+{
+    public FBRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<FB?> GetByIdAsync(long id)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM FBs WHERE fb_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) {
+                return new FB { 
+                    ItemId = (int)r.GetInt64(0), 
+                    Name = r.GetString(1), 
+                    Price = r.GetDecimal(2), 
+                    Type = Enum.Parse<FBType>(r.GetString(3)),
+                    CategoryId = (int)r.GetInt64(r.GetOrdinal("category_id")),
+                    IsVisible = r.GetBoolean(6),
+                    Unit = r.IsDBNull(r.GetOrdinal("unit")) ? null : r.GetString(r.GetOrdinal("unit"))
+                };
+            }
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task<IEnumerable<FB>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM FBs";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<FB>();
+            while (await r.ReadAsync()) {
+                list.Add(new FB { 
+                    ItemId = (int)r.GetInt64(0), 
+                    Name = r.GetString(1), 
+                    Price = r.GetDecimal(2), 
+                    Type = Enum.Parse<FBType>(r.GetString(3)),
+                    CategoryId = (int)r.GetInt64(r.GetOrdinal("category_id")),
+                    IsVisible = r.GetBoolean(6),
+                    Unit = r.IsDBNull(r.GetOrdinal("unit")) ? null : r.GetString(r.GetOrdinal("unit"))
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task AddAsync(FB entity) {}
+    public async Task UpdateAsync(FB entity) {}
+    public async Task DeleteAsync(long id) {}
+    public async Task<IEnumerable<FB>> GetMenuAsync(bool includeInhouse = false) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = includeInhouse
+                ? "SELECT * FROM FBs WHERE type != 'FRESH_RAW' AND is_visible = 1"
+                : "SELECT * FROM FBs WHERE type = 'REGULAR' AND is_visible = 1";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<FB>();
+            while (await r.ReadAsync()) {
+                list.Add(new FB { 
+                    ItemId = (int)r.GetInt64(0), 
+                    Name = r.GetString(1), 
+                    Price = r.GetDecimal(2), 
+                    Type = Enum.Parse<FBType>(r.GetString(3)),
+                    CategoryId = (int)r.GetInt64(r.GetOrdinal("category_id")),
+                    IsVisible = r.GetBoolean(6),
+                    Unit = r.IsDBNull(r.GetOrdinal("unit")) ? null : r.GetString(r.GetOrdinal("unit"))
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task<long> InsertAndReturnIdAsync(FB entity) => 1;
+}
+`,
+    'WarehouseRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.DTOs;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class WarehouseRepository : BaseRepository, IWarehouseRepository
+{
+    public WarehouseRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<Warehouse?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<Warehouse>> GetAllAsync() { return new List<Warehouse>(); }
+    public async Task AddAsync(Warehouse entity) {}
+    public async Task UpdateAsync(Warehouse entity) {}
+    public async Task DeleteAsync(long id) {}
+
+    public async Task<Warehouse?> GetByFBIdAsync(long fbId)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT w.*, f.type as fb_type FROM Warehouses w INNER JOIN FBs f ON w.fb_id = f.fb_id WHERE w.fb_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", fbId);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) {
+                return new Warehouse { 
+                    ItemId = (int)r.GetInt64(r.GetOrdinal("fb_id")), 
+                    Quantity = r.GetInt32(r.GetOrdinal("quantity")),
+                    FBType = Enum.Parse<FBType>(r.GetString(r.GetOrdinal("fb_type")))
+                };
+            }
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    
+    public async Task UpdateQuantityAsync(long fbId, int newQuantity)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "UPDATE Warehouses SET quantity = @Qty WHERE fb_id = @Id";
+            cmd.Parameters.AddWithValue("@Qty", newQuantity);
+            cmd.Parameters.AddWithValue("@Id", fbId);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    
+    public async Task<IEnumerable<WarehouseReportRow>> GetReportAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"
+                SELECT f.fb_id, f.name, f.type, w.quantity, w.low_stock_threshold,
+                       CASE WHEN w.quantity = 0 THEN 'OUT_OF_STOCK'
+                            WHEN w.quantity <= w.low_stock_threshold THEN 'LOW_STOCK'
+                            ELSE 'NORMAL' END AS stock_status
+                FROM Warehouses w
+                INNER JOIN FBs f ON f.fb_id = w.fb_id
+                ORDER BY CASE WHEN w.quantity = 0 THEN 0 WHEN w.quantity <= w.low_stock_threshold THEN 1 ELSE 2 END, f.name";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<WarehouseReportRow>();
+            while (await r.ReadAsync()) {
+                list.Add(new WarehouseReportRow(
+                    r.GetInt64(0), r.GetString(1), Enum.Parse<FBType>(r.GetString(2)),
+                    r.GetInt32(3), r.GetInt32(4), Enum.Parse<StockStatus>(r.GetString(5))
+                ));
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+}
+`,
+    'RestaurantOrderRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class RestaurantOrderRepository : BaseRepository, IRestaurantOrderRepository
+{
+    public RestaurantOrderRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<RestaurantOrder?> GetByIdAsync(long id)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM RestaurantOrders WHERE order_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) {
+                return new RestaurantOrder {
+                    OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                    TableId = (int)r.GetInt64(r.GetOrdinal("table_id")),
+                    Status = Enum.Parse<OrderStatus>(r.GetString(r.GetOrdinal("status"))),
+                    CreatedAt = r.GetDateTime(r.GetOrdinal("created_at"))
+                };
+            }
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task<IEnumerable<RestaurantOrder>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM RestaurantOrders ORDER BY created_at DESC";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<RestaurantOrder>();
+            while (await r.ReadAsync()) {
+                list.Add(new RestaurantOrder {
+                    OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                    TableId = (int)r.GetInt64(r.GetOrdinal("table_id")),
+                    Status = Enum.Parse<OrderStatus>(r.GetString(r.GetOrdinal("status"))),
+                    CreatedAt = r.GetDateTime(r.GetOrdinal("created_at"))
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task AddAsync(RestaurantOrder entity) {}
+    public async Task UpdateAsync(RestaurantOrder entity) {}
+    public async Task DeleteAsync(long id) {}
+
+    public async Task<RestaurantOrder?> GetWithItemsAsync(long orderId)
+    {
+        var order = await GetByIdAsync(orderId);
+        if (order == null) return null;
+
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM OrderItems WHERE order_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", orderId);
+            await using var r = await cmd.ExecuteReaderAsync();
+            order.OrderItems = new List<OrderItem>();
+            while (await r.ReadAsync())
+            {
+                order.OrderItems.Add(new OrderItem {
+                    OrderItemId = r.GetInt64(r.GetOrdinal("order_item_id")),
+                    OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                    ItemId = (int)r.GetInt64(r.GetOrdinal("item_id")),
+                    Quantity = r.GetInt32(r.GetOrdinal("quantity")),
+                    UnitPrice = r.GetDecimal(r.GetOrdinal("unit_price"))
+                });
+            }
+            return order;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task<IEnumerable<RestaurantOrder>> GetByTableAsync(long tableId) { return new List<RestaurantOrder>(); }
+    
+    public async Task<long> InsertAndReturnIdAsync(RestaurantOrder order)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO RestaurantOrders (table_id, reservation_id, customer_id, status, created_at)
+                               OUTPUT INSERTED.order_id VALUES (@TId, @ResId, @CId, @Status, @Created)";
+            cmd.Parameters.AddWithValue("@TId", order.TableId);
+            cmd.Parameters.AddWithValue("@ResId", (object?)order.ReservationId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@CId", (object?)order.CustomerId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@Status", order.Status.ToString());
+            cmd.Parameters.AddWithValue("@Created", order.CreatedAt);
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    
+    public async Task UpdateStatusAsync(long orderId, OrderStatus status)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "UPDATE RestaurantOrders SET status = @Status WHERE order_id = @Id";
+            cmd.Parameters.AddWithValue("@Status", status.ToString());
+            cmd.Parameters.AddWithValue("@Id", orderId);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+}
+`,
+    'OrderItemRepository.cs': `
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class OrderItemRepository : BaseRepository, IOrderItemRepository
+{
+    public OrderItemRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<OrderItem?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<OrderItem>> GetAllAsync() { return new List<OrderItem>(); }
+    public async Task AddAsync(OrderItem entity) {}
+    public async Task UpdateAsync(OrderItem entity) {}
+    public async Task DeleteAsync(long id) {}
+
+    public async Task<IEnumerable<OrderItem>> GetByOrderIdAsync(long orderId)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM OrderItems WHERE order_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", orderId);
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<OrderItem>();
+            while (await r.ReadAsync()) {
+                list.Add(new OrderItem {
+                    OrderItemId = r.GetInt64(r.GetOrdinal("order_item_id")),
+                    OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                    ItemId = (int)r.GetInt64(r.GetOrdinal("item_id")),
+                    Quantity = r.GetInt32(r.GetOrdinal("quantity")),
+                    UnitPrice = r.GetDecimal(r.GetOrdinal("unit_price"))
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+
+    public async Task<long> InsertAndReturnIdAsync(OrderItem item)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO OrderItems (order_id, item_id, quantity, unit_price)
+                               OUTPUT INSERTED.order_item_id VALUES (@OId, @IId, @Qty, @Price)";
+            cmd.Parameters.AddWithValue("@OId", item.OrderId);
+            cmd.Parameters.AddWithValue("@IId", item.ItemId);
+            cmd.Parameters.AddWithValue("@Qty", item.Quantity);
+            cmd.Parameters.AddWithValue("@Price", item.UnitPrice);
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+}
+`,
+    'InvoiceRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class InvoiceRepository : BaseRepository, IInvoiceRepository
+{
+    public InvoiceRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<Invoice?> GetByIdAsync(long id)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Invoices WHERE invoice_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) {
+                return new Invoice {
+                    InvoiceId = r.GetInt64(r.GetOrdinal("invoice_id")),
+                    OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                    Subtotal = r.GetDecimal(r.GetOrdinal("subtotal")),
+                    DiscountAmount = r.GetDecimal(r.GetOrdinal("discount_amount")),
+                    Total = r.GetDecimal(r.GetOrdinal("total")),
+                    Status = Enum.Parse<InvoiceStatus>(r.GetString(r.GetOrdinal("status")))
+                };
+            }
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task<IEnumerable<Invoice>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Invoices ORDER BY invoice_id DESC";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<Invoice>();
+            while (await r.ReadAsync()) {
+                list.Add(new Invoice {
+                    InvoiceId = r.GetInt64(r.GetOrdinal("invoice_id")),
+                    OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                    Subtotal = r.GetDecimal(r.GetOrdinal("subtotal")),
+                    DiscountAmount = r.GetDecimal(r.GetOrdinal("discount_amount")),
+                    Total = r.GetDecimal(r.GetOrdinal("total")),
+                    Status = Enum.Parse<InvoiceStatus>(r.GetString(r.GetOrdinal("status")))
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task AddAsync(Invoice entity) {}
+
+    public async Task UpdateAsync(Invoice entity)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"UPDATE Invoices SET subtotal=@Sub, discount_amount=@Disc, total=@Total, 
+                               status=@Status, payment_method=@PM, discount_code_id=@DCId, 
+                               cashier_id=@CId, paid_at=@PaidAt WHERE invoice_id=@Id";
+            cmd.Parameters.AddWithValue("@Sub", entity.Subtotal);
+            cmd.Parameters.AddWithValue("@Disc", entity.DiscountAmount);
+            cmd.Parameters.AddWithValue("@Total", entity.Total);
+            cmd.Parameters.AddWithValue("@Status", entity.Status.ToString());
+            cmd.Parameters.AddWithValue("@PM", (object?)entity.PaymentMethod?.ToString() ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@DCId", (object?)entity.DiscountCodeId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@CId", (object?)entity.CashierId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@PaidAt", (object?)entity.PaidAt ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@Id", entity.InvoiceId);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+
+    public async Task DeleteAsync(long id) {}
+    public async Task<Invoice?> GetByOrderIdAsync(long orderId)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Invoices WHERE order_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", orderId);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) {
+                return new Invoice {
+                    InvoiceId = r.GetInt64(r.GetOrdinal("invoice_id")),
+                    OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                    Status = Enum.Parse<InvoiceStatus>(r.GetString(r.GetOrdinal("status")))
+                };
+            }
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    
+    public async Task<long> InsertAndReturnIdAsync(Invoice invoice)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO Invoices (order_id, subtotal, discount_amount, total, status)
+                               OUTPUT INSERTED.invoice_id VALUES (@OId, @Sub, @Disc, @Total, @Status)";
+            cmd.Parameters.AddWithValue("@OId", invoice.OrderId);
+            cmd.Parameters.AddWithValue("@Sub", invoice.Subtotal);
+            cmd.Parameters.AddWithValue("@Disc", invoice.DiscountAmount);
+            cmd.Parameters.AddWithValue("@Total", invoice.Total);
+            cmd.Parameters.AddWithValue("@Status", invoice.Status.ToString());
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+}
+`,
+    'DiscountCodeRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class DiscountCodeRepository : BaseRepository, IDiscountCodeRepository
+{
+    public DiscountCodeRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<DiscountCode?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<DiscountCode>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM DiscountCodes";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<DiscountCode>();
+            while (await r.ReadAsync()) {
+                list.Add(new DiscountCode {
+                    DiscountCodeId = (int)r.GetInt64(r.GetOrdinal("discount_code_id")),
+                    Code = r.GetString(r.GetOrdinal("code")),
+                    DiscountType = r.GetString(r.GetOrdinal("discount_type")),
+                    DiscountValue = r.GetDecimal(r.GetOrdinal("discount_value")),
+                    MinOrderAmount = r.IsDBNull(r.GetOrdinal("min_order_amount")) ? null : r.GetDecimal(r.GetOrdinal("min_order_amount")),
+                    MaxDiscountAmount = r.IsDBNull(r.GetOrdinal("max_discount_amount")) ? null : r.GetDecimal(r.GetOrdinal("max_discount_amount")),
+                    ValidFrom = r.GetDateTime(r.GetOrdinal("valid_from")),
+                    ValidTo = r.GetDateTime(r.GetOrdinal("valid_to")),
+                    UsageLimit = r.IsDBNull(r.GetOrdinal("usage_limit")) ? null : r.GetInt32(r.GetOrdinal("usage_limit")),
+                    UsedCount = r.GetInt32(r.GetOrdinal("used_count")),
+                    IsActive = r.GetBoolean(r.GetOrdinal("is_active"))
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task AddAsync(DiscountCode entity) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO DiscountCodes (code, discount_type, discount_value, min_order_amount,
+                max_discount_amount, valid_from, valid_to, usage_limit, used_count, is_active)
+            VALUES (@Code,@Type,@Val,@Min,@Max,@From,@To,@Limit,0,1)";
+            cmd.Parameters.AddWithValue("@Code",  entity.Code);
+            cmd.Parameters.AddWithValue("@Type",  entity.DiscountType);
+            cmd.Parameters.AddWithValue("@Val",   entity.DiscountValue);
+            cmd.Parameters.AddWithValue("@Min",   (object?)entity.MinOrderAmount    ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@Max",   (object?)entity.MaxDiscountAmount ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@From",  entity.ValidFrom);
+            cmd.Parameters.AddWithValue("@To",    entity.ValidTo);
+            cmd.Parameters.AddWithValue("@Limit", (object?)entity.UsageLimit        ?? DBNull.Value);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task UpdateAsync(DiscountCode entity) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "UPDATE DiscountCodes SET is_active = @Active WHERE discount_code_id = @Id";
+            cmd.Parameters.AddWithValue("@Active", entity.IsActive);
+            cmd.Parameters.AddWithValue("@Id",     entity.DiscountCodeId);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task DeleteAsync(long id) {}
+    
+    public async Task<DiscountCode?> GetByCodeAsync(string code)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM DiscountCodes WHERE code = @Code";
+            cmd.Parameters.AddWithValue("@Code", code);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) {
+                return new DiscountCode {
+                    DiscountCodeId = (int)r.GetInt64(r.GetOrdinal("discount_code_id")),
+                    Code = r.GetString(r.GetOrdinal("code")),
+                    DiscountType = r.GetString(r.GetOrdinal("discount_type")),
+                    DiscountValue = r.GetDecimal(r.GetOrdinal("discount_value")),
+                    MinOrderAmount = r.IsDBNull(r.GetOrdinal("min_order_amount")) ? null : r.GetDecimal(r.GetOrdinal("min_order_amount")),
+                    MaxDiscountAmount = r.IsDBNull(r.GetOrdinal("max_discount_amount")) ? null : r.GetDecimal(r.GetOrdinal("max_discount_amount")),
+                    ValidFrom = r.GetDateTime(r.GetOrdinal("valid_from")),
+                    ValidTo = r.GetDateTime(r.GetOrdinal("valid_to")),
+                    UsageLimit = r.IsDBNull(r.GetOrdinal("usage_limit")) ? null : r.GetInt32(r.GetOrdinal("usage_limit")),
+                    UsedCount = r.GetInt32(r.GetOrdinal("used_count")),
+                    IsActive = r.GetBoolean(r.GetOrdinal("is_active"))
+                };
+            }
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+
+    public async Task IncrementUsedCountAsync(long discountCodeId)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "UPDATE DiscountCodes SET used_count = used_count + 1 WHERE discount_code_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", discountCodeId);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+}
+`,
+    'ReviewRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class ReviewRepository : BaseRepository, IReviewRepository
+{
+    public ReviewRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<Review?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<Review>> GetAllAsync() { return new List<Review>(); }
+    public async Task AddAsync(Review entity) {}
+    public async Task UpdateAsync(Review entity) {}
+    public async Task DeleteAsync(long id) {}
+    
+    public async Task<bool> ExistsByInvoiceIdAsync(long invoiceId)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT COUNT(1) FROM Reviews WHERE invoice_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", invoiceId);
+            return (int)await cmd.ExecuteScalarAsync() > 0;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+
+    public async Task<long> InsertAndReturnIdAsync(Review review)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO Reviews (invoice_id, customer_id, stars, content, created_at)
+                               OUTPUT INSERTED.review_id VALUES (@IId, @CId, @Stars, @Content, @Created)";
+            cmd.Parameters.AddWithValue("@IId", review.InvoiceId);
+            cmd.Parameters.AddWithValue("@CId", review.CustomerId);
+            cmd.Parameters.AddWithValue("@Stars", review.Stars);
+            cmd.Parameters.AddWithValue("@Content", review.Content);
+            cmd.Parameters.AddWithValue("@Created", review.CreatedAt);
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+}
+`,
+    'TableReservationRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class TableReservationRepository : BaseRepository, ITableReservationRepository
+{
+    public TableReservationRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<TableReservation?> GetByIdAsync(long id) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM TableReservations WHERE reservation_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (!await r.ReadAsync()) return null;
+            return new TableReservation {
+                ReservationId = r.GetInt64(r.GetOrdinal("reservation_id")),
+                CustomerId    = r.GetInt64(r.GetOrdinal("customer_id")),
+                TableId       = (int)r.GetInt64(r.GetOrdinal("table_id")),
+                ReservedAt    = r.GetDateTime(r.GetOrdinal("reserved_at")),
+                GuestCount    = r.GetInt32(r.GetOrdinal("guest_count")),
+                Notes         = r.IsDBNull(r.GetOrdinal("notes")) ? null : r.GetString(r.GetOrdinal("notes")),
+                Status        = Enum.Parse<ReservationStatus>(r.GetString(r.GetOrdinal("status"))),
+            };
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task<IEnumerable<TableReservation>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM TableReservations ORDER BY reserved_at DESC";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<TableReservation>();
+            while (await r.ReadAsync()) {
+                list.Add(new TableReservation {
+                    ReservationId = r.GetInt64(r.GetOrdinal("reservation_id")),
+                    CustomerId    = r.GetInt64(r.GetOrdinal("customer_id")),
+                    TableId       = (int)r.GetInt64(r.GetOrdinal("table_id")),
+                    ReservedAt    = r.GetDateTime(r.GetOrdinal("reserved_at")),
+                    GuestCount    = r.GetInt32(r.GetOrdinal("guest_count")),
+                    Notes         = r.IsDBNull(r.GetOrdinal("notes")) ? null : r.GetString(r.GetOrdinal("notes")),
+                    Status        = Enum.Parse<ReservationStatus>(r.GetString(r.GetOrdinal("status"))),
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task AddAsync(TableReservation entity) {}
+    public async Task UpdateAsync(TableReservation entity) {}
+    public async Task DeleteAsync(long id) {}
+    public async Task<IEnumerable<TableReservation>> GetByCustomerIdAsync(long customerId) { return new List<TableReservation>(); }
+    
+    public async Task<long> InsertAndReturnIdAsync(TableReservation res)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO TableReservations (customer_id, table_id, reserved_at, guest_count, notes, status)
+                               OUTPUT INSERTED.reservation_id VALUES (@CId, @TId, @Date, @GC, @Notes, @Status)";
+            cmd.Parameters.AddWithValue("@CId", res.CustomerId);
+            cmd.Parameters.AddWithValue("@TId", res.TableId);
+            cmd.Parameters.AddWithValue("@Date", res.ReservedAt);
+            cmd.Parameters.AddWithValue("@GC", res.GuestCount);
+            cmd.Parameters.AddWithValue("@Notes", (object?)res.Notes ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@Status", res.Status.ToString());
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+
+    public async Task UpdateStatusAsync(long reservationId, ReservationStatus status) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "UPDATE TableReservations SET status = @Status WHERE reservation_id = @Id";
+            cmd.Parameters.AddWithValue("@Status", status.ToString());
+            cmd.Parameters.AddWithValue("@Id", reservationId);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+}
+`,
+    'ReceiptRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class ReceiptRepository : BaseRepository, IReceiptRepository
+{
+    public ReceiptRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<Receipt?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<Receipt>> GetAllAsync() { return new List<Receipt>(); }
+    public async Task AddAsync(Receipt entity) {}
+    public async Task UpdateAsync(Receipt entity) {}
+    public async Task DeleteAsync(long id) {}
+    
+    public async Task<Receipt?> GetWithDetailsAsync(long receiptId) { return null; }
+
+    public async Task<long> InsertAndReturnIdAsync(Receipt receipt)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO Receipts (manufacturer_id, staff_id, imported_at)
+                               OUTPUT INSERTED.receipt_id VALUES (@MId, @SId, @Date)";
+            cmd.Parameters.AddWithValue("@MId", receipt.ManufacturerId);
+            cmd.Parameters.AddWithValue("@SId", receipt.CreatedBy);
+            cmd.Parameters.AddWithValue("@Date", receipt.ReceiptDate);
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+}
+`,
+    'ReceiptDetailRepository.cs': `
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class ReceiptDetailRepository : BaseRepository, IReceiptDetailRepository
+{
+    public ReceiptDetailRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<ReceiptDetail?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<ReceiptDetail>> GetAllAsync() { return new List<ReceiptDetail>(); }
+    public async Task AddAsync(ReceiptDetail entity) {}
+    public async Task UpdateAsync(ReceiptDetail entity) {}
+    public async Task DeleteAsync(long id) {}
+    
+    public async Task<long> InsertAndReturnIdAsync(ReceiptDetail entity)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO ReceiptDetails (receipt_id, item_id, quantity, import_price)
+                               OUTPUT INSERTED.receipt_detail_id VALUES (@RId, @IId, @Qty, @Price)";
+            cmd.Parameters.AddWithValue("@RId", entity.ReceiptId);
+            cmd.Parameters.AddWithValue("@IId", entity.ItemId);
+            cmd.Parameters.AddWithValue("@Qty", entity.Quantity);
+            cmd.Parameters.AddWithValue("@Price", entity.ImportPrice);
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+
+    public async Task<IEnumerable<ReceiptDetail>> GetByReceiptIdAsync(long receiptId) { return new List<ReceiptDetail>(); }
+    public async Task DeleteByReceiptIdAsync(long receiptId) {}
+}
+`,
+    'StaffRepository.cs': `
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class StaffRepository : BaseRepository, IStaffRepository
+{
+    public StaffRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<Staff?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<Staff>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Staff ORDER BY full_name";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<Staff>();
+            while (await r.ReadAsync()) {
+                list.Add(new Staff {
+                    StaffId = r.GetInt64(r.GetOrdinal("staff_id")),
+                    FullName = r.GetString(r.GetOrdinal("full_name")),
+                    Email = r.GetString(r.GetOrdinal("email")),
+                    Password = r.GetString(r.GetOrdinal("password")),
+                    Role = r.GetString(r.GetOrdinal("role")),
+                    IsActive = r.GetBoolean(r.GetOrdinal("is_active"))
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task AddAsync(Staff entity) {}
+    public async Task UpdateAsync(Staff entity) {}
+    public async Task DeleteAsync(long id) {}
+    
+    public async Task<Staff?> GetByEmailAsync(string email)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Staff WHERE email = @Email";
+            cmd.Parameters.AddWithValue("@Email", email);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) {
+                return new Staff {
+                    StaffId = r.GetInt64(r.GetOrdinal("staff_id")),
+                    FullName = r.GetString(r.GetOrdinal("full_name")),
+                    Email = r.GetString(r.GetOrdinal("email")),
+                    Password = r.GetString(r.GetOrdinal("password")),
+                    Role = r.GetString(r.GetOrdinal("role")),
+                    IsActive = r.GetBoolean(r.GetOrdinal("is_active"))
+                };
+            }
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    
+    public async Task<long> InsertAndReturnIdAsync(Staff entity) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO Staff (full_name, email, phone, password, role, is_active, created_at)
+                               OUTPUT INSERTED.staff_id VALUES (@Name,@Email,@Phone,@Pass,@Role,1,GETUTCDATE())";
+            cmd.Parameters.AddWithValue("@Name",  entity.FullName);
+            cmd.Parameters.AddWithValue("@Email", entity.Email);
+            cmd.Parameters.AddWithValue("@Phone", (object?)entity.Phone ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@Pass",  entity.Password);
+            cmd.Parameters.AddWithValue("@Role",  entity.Role);
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+}
+`,
+    'CustomerRepository.cs': `
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class CustomerRepository : BaseRepository, ICustomerRepository
+{
+    public CustomerRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<Customer?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<Customer>> GetAllAsync() { return new List<Customer>(); }
+    public async Task AddAsync(Customer entity) {}
+    public async Task UpdateAsync(Customer entity) {}
+    public async Task DeleteAsync(long id) {}
+    
+    public async Task<Customer?> GetByPhoneAsync(string phone)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Customers WHERE phone = @Phone";
+            cmd.Parameters.AddWithValue("@Phone", phone);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) {
+                return new Customer {
+                    CustomerId = r.GetInt64(r.GetOrdinal("customer_id")),
+                    FullName = r.GetString(r.GetOrdinal("full_name")),
+                    Phone = r.GetString(r.GetOrdinal("phone")),
+                    Password = r.GetString(r.GetOrdinal("password"))
+                };
+            }
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    
+    public async Task UpdateLoyaltyPointsAsync(long customerId, int points) {}
+    public async Task<long> InsertAndReturnIdAsync(Customer entity)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO Customers (phone, full_name, email, password, membership_level, loyalty_points, created_at)
+                               OUTPUT INSERTED.customer_id VALUES (@Phone, @Name, @Email, @Pass, 'NORMAL', 0, GETUTCDATE())";
+            cmd.Parameters.AddWithValue("@Phone", entity.Phone);
+            cmd.Parameters.AddWithValue("@Name", entity.FullName);
+            cmd.Parameters.AddWithValue("@Email", (object?)entity.Email ?? System.DBNull.Value);
+            cmd.Parameters.AddWithValue("@Pass", entity.Password);
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+}
+`,
+    'RestaurantTableRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class RestaurantTableRepository : BaseRepository, IRestaurantTableRepository
+{
+    public RestaurantTableRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<RestaurantTable?> GetByIdAsync(long id)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM RestaurantTables WHERE table_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (!await r.ReadAsync()) return null;
+            return new RestaurantTable {
+                TableId = (int)r.GetInt64(r.GetOrdinal("table_id")),
+                Status = Enum.Parse<TableStatus>(r.GetString(r.GetOrdinal("status"))),
+                Capacity = r.GetInt32(r.GetOrdinal("capacity"))
+            };
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task<IEnumerable<RestaurantTable>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM RestaurantTables ORDER BY table_id";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<RestaurantTable>();
+            while (await r.ReadAsync()) {
+                list.Add(new RestaurantTable {
+                    TableId = (int)r.GetInt64(r.GetOrdinal("table_id")),
+                    Status = Enum.Parse<TableStatus>(r.GetString(r.GetOrdinal("status"))),
+                    Capacity = r.GetInt32(r.GetOrdinal("capacity"))
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task AddAsync(RestaurantTable entity) {}
+    public async Task UpdateAsync(RestaurantTable entity) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "UPDATE RestaurantTables SET status = @Status WHERE table_id = @Id";
+            cmd.Parameters.AddWithValue("@Status", entity.Status.ToString());
+            cmd.Parameters.AddWithValue("@Id", entity.TableId);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task DeleteAsync(long id) {}
+}
+`
+};
+
+for (const [file, code] of Object.entries(repos)) {
+    fs.writeFileSync(path.join(dir, file), code.trim());
+}
+
+``n
+
+## File: apply_queries.js
+`$language
+const fs = require('fs');
+const path = require('path');
+
+const featDir = 'RestaurantMS/src/RestaurantMS.Application/Features';
+const ctlDir = 'RestaurantMS/src/RestaurantMS.API/Controllers';
+
+// Queries to create
+const queries = {
+    'Category/Queries/GetAllCategoriesQuery.cs': `
+using MediatR;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Common.Interfaces;
+
+namespace RestaurantMS.Application.Features.Category.Queries;
+public record GetAllCategoriesQuery() : IRequest<IEnumerable<object>>;
+public class GetAllCategoriesQueryHandler : IRequestHandler<GetAllCategoriesQuery, IEnumerable<object>> {
+    private readonly IUnitOfWork _uow;
+    public GetAllCategoriesQueryHandler(IUnitOfWork uow) => _uow = uow;
+    public async Task<IEnumerable<object>> Handle(GetAllCategoriesQuery req, CancellationToken ct) {
+        var items = await _uow.Categories.GetAllAsync();
+        return items;
+    }
+}`,
+    'Manufacturer/Queries/GetManufacturersQuery.cs': `
+using MediatR;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Common.Interfaces;
+
+namespace RestaurantMS.Application.Features.Manufacturer.Queries;
+public record GetManufacturersQuery() : IRequest<IEnumerable<object>>;
+public class GetManufacturersQueryHandler : IRequestHandler<GetManufacturersQuery, IEnumerable<object>> {
+    private readonly IUnitOfWork _uow;
+    public GetManufacturersQueryHandler(IUnitOfWork uow) => _uow = uow;
+    public async Task<IEnumerable<object>> Handle(GetManufacturersQuery req, CancellationToken ct) {
+        var items = await _uow.Manufacturers.GetAllAsync();
+        return items;
+    }
+}`,
+    'Customer/Queries/GetAllCustomersQuery.cs': `
+using MediatR;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Common.Interfaces;
+
+namespace RestaurantMS.Application.Features.Customer.Queries;
+public record GetAllCustomersQuery() : IRequest<IEnumerable<object>>;
+public class GetAllCustomersQueryHandler : IRequestHandler<GetAllCustomersQuery, IEnumerable<object>> {
+    private readonly IUnitOfWork _uow;
+    public GetAllCustomersQueryHandler(IUnitOfWork uow) => _uow = uow;
+    public async Task<IEnumerable<object>> Handle(GetAllCustomersQuery req, CancellationToken ct) {
+        var items = await _uow.Customers.GetAllAsync();
+        return items;
+    }
+}`,
+    'Receipt/Queries/GetAllReceiptsQuery.cs': `
+using MediatR;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Common.Interfaces;
+
+namespace RestaurantMS.Application.Features.Receipt.Queries;
+public record GetAllReceiptsQuery() : IRequest<IEnumerable<object>>;
+public class GetAllReceiptsQueryHandler : IRequestHandler<GetAllReceiptsQuery, IEnumerable<object>> {
+    private readonly IUnitOfWork _uow;
+    public GetAllReceiptsQueryHandler(IUnitOfWork uow) => _uow = uow;
+    public async Task<IEnumerable<object>> Handle(GetAllReceiptsQuery req, CancellationToken ct) {
+        var items = await _uow.Receipts.GetAllAsync();
+        return items;
+    }
+}`,
+    'Review/Queries/GetAllReviewsQuery.cs': `
+using MediatR;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Common.Interfaces;
+
+namespace RestaurantMS.Application.Features.Review.Queries;
+public record GetAllReviewsQuery() : IRequest<IEnumerable<object>>;
+public class GetAllReviewsQueryHandler : IRequestHandler<GetAllReviewsQuery, IEnumerable<object>> {
+    private readonly IUnitOfWork _uow;
+    public GetAllReviewsQueryHandler(IUnitOfWork uow) => _uow = uow;
+    public async Task<IEnumerable<object>> Handle(GetAllReviewsQuery req, CancellationToken ct) {
+        var items = await _uow.Reviews.GetAllAsync();
+        return items;
+    }
+}`,
+    'Reservation/Queries/GetAllReservationsQuery.cs': `
+using MediatR;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Common.Interfaces;
+
+namespace RestaurantMS.Application.Features.Reservation.Queries;
+public record GetAllReservationsQuery() : IRequest<IEnumerable<object>>;
+public class GetAllReservationsQueryHandler : IRequestHandler<GetAllReservationsQuery, IEnumerable<object>> {
+    private readonly IUnitOfWork _uow;
+    public GetAllReservationsQueryHandler(IUnitOfWork uow) => _uow = uow;
+    public async Task<IEnumerable<object>> Handle(GetAllReservationsQuery req, CancellationToken ct) {
+        var items = await _uow.TableReservations.GetAllAsync();
+        return items;
+    }
+}`
+};
+
+for (const [file, code] of Object.entries(queries)) {
+    const fullPath = path.join(featDir, file);
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    fs.writeFileSync(fullPath, code.trim());
+}
+
+// Update controllers to use the new queries
+const controllers = {
+    'CategoryController.cs': [
+        /using System.Threading.Tasks;/g, 
+        'using System.Threading.Tasks;\nusing RestaurantMS.Application.Features.Category.Queries;'
+    ],
+    'ManufacturerController.cs': [
+        /using System.Threading.Tasks;/g, 
+        'using System.Threading.Tasks;\nusing RestaurantMS.Application.Features.Manufacturer.Queries;'
+    ],
+    'CustomerController.cs': [
+        /using System.Threading.Tasks;/g, 
+        'using System.Threading.Tasks;\nusing RestaurantMS.Application.Features.Customer.Queries;'
+    ],
+    'ReceiptController.cs': [
+        /using System.Threading.Tasks;/g, 
+        'using System.Threading.Tasks;\nusing RestaurantMS.Application.Features.Receipt.Queries;'
+    ],
+    'ReviewController.cs': [
+        /using System.Threading.Tasks;/g, 
+        'using System.Threading.Tasks;\nusing RestaurantMS.Application.Features.Review.Queries;'
+    ]
+};
+
+for (const [file, replacements] of Object.entries(controllers)) {
+    const fullPath = path.join(ctlDir, file);
+    if (fs.existsSync(fullPath)) {
+        let code = fs.readFileSync(fullPath, 'utf8');
+        code = code.replace(replacements[0], replacements[1]);
+        
+        if (file === 'CategoryController.cs') {
+            code = code.replace(/Ok\(new List<object>\(\)\)/, 'Ok(await _m.Send(new GetAllCategoriesQuery(), ct))');
+        } else if (file === 'ManufacturerController.cs') {
+            code = code.replace(/Ok\(new List<object>\(\)\)/, 'Ok(await _m.Send(new GetManufacturersQuery(), ct))');
+        } else if (file === 'CustomerController.cs') {
+            if (!code.includes('GetAll')) {
+                code = code.replace(/public class CustomerController : ControllerBase\s*\{([^}]*)\}/, 
+                    'public class CustomerController : ControllerBase\n{\n$1\n    [HttpGet]\n    [Authorize(Policy = "StaffOnly")]\n    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _m.Send(new GetAllCustomersQuery(), ct));\n}');
+            }
+        } else if (file === 'ReceiptController.cs') {
+            if (!code.includes('GetAll')) {
+                code = code.replace(/public class ReceiptController : ControllerBase\s*\{([^}]*)\}/, 
+                    'public class ReceiptController : ControllerBase\n{\n$1\n    [HttpGet]\n    [Authorize(Policy = "StaffOnly")]\n    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _m.Send(new GetAllReceiptsQuery(), ct));\n}');
+            }
+        } else if (file === 'ReviewController.cs') {
+            if (!code.includes('GetAll')) {
+                code = code.replace(/public class ReviewController : ControllerBase\s*\{([^}]*)\}/, 
+                    'public class ReviewController : ControllerBase\n{\n$1\n    [HttpGet]\n    [Authorize(Policy = "StaffOnly")]\n    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _m.Send(new GetAllReviewsQuery(), ct));\n}');
+            }
+        }
+        fs.writeFileSync(fullPath, code);
+    }
+}
+
+// Update TableReservationController.cs separately as it needs [HttpGet("all")]
+const tableResPath = path.join(ctlDir, 'TableReservationController.cs');
+let trCode = fs.readFileSync(tableResPath, 'utf8');
+if (!trCode.includes('GetAll')) {
+    trCode = trCode.replace('public class TableReservationController : ControllerBase\n{', 
+        'public class TableReservationController : ControllerBase\n{\n    [HttpGet("all")]\n    [Authorize(Policy = "StaffOnly")]\n    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _m.Send(new GetAllReservationsQuery(), ct));\n');
+    fs.writeFileSync(tableResPath, trCode);
+}
+
+``n
+
+## File: apply_uow.js
+`$language
+const fs = require('fs');
+const path = require('path');
+
+const dir = 'RestaurantMS/src/RestaurantMS.Infrastructure/Repositories';
+
+const baseRepoCode = `
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public abstract class BaseRepository
+{
+    protected readonly SqlConnectionFactory _factory;
+    protected readonly UnitOfWork _uow;
+
+    protected BaseRepository(SqlConnectionFactory factory, UnitOfWork uow)
+    {
+        _factory = factory;
+        _uow = uow;
+    }
+
+    protected async Task<(SqlConnection conn, SqlTransaction? tx, bool owned)> GetConnAsync()
+    {
+        if (_uow.ActiveConnection != null)
+            return (_uow.ActiveConnection, _uow.ActiveTransaction, false);
+
+        var conn = await _factory.CreateConnectionAsync();
+        return (conn, null, true);
+    }
+}
+`;
+
+fs.writeFileSync(path.join(dir, 'BaseRepository.cs'), baseRepoCode.trim());
+
+let uowCode = fs.readFileSync(path.join(dir, 'UnitOfWork.cs'), 'utf8');
+if (!uowCode.includes('internal SqlConnection?')) {
+    uowCode = uowCode.replace('public class UnitOfWork : IUnitOfWork\n{', 'public class UnitOfWork : IUnitOfWork\n{\n    internal SqlConnection? ActiveConnection => _connection;\n    internal SqlTransaction? ActiveTransaction => _transaction;');
+    uowCode = uowCode.replace(/new (\w+)Repository\(_factory\)/g, 'new $1Repository(_factory, this)');
+    fs.writeFileSync(path.join(dir, 'UnitOfWork.cs'), uowCode);
+}
+
+const files = fs.readdirSync(dir);
+for (const file of files) {
+    if (file.endsWith('Repository.cs') && file !== 'UnitOfWork.cs' && file !== 'BaseRepository.cs') {
+        let code = fs.readFileSync(path.join(dir, file), 'utf8');
+        
+        // Inherit BaseRepository
+        if (code.includes('public class ') && !code.includes('BaseRepository')) {
+            code = code.replace(/public class (\w+Repository) : (I\w+Repository)/, 'public class $1 : BaseRepository, $2');
+        }
+        
+        // Fix constructor
+        code = code.replace(/public \w+Repository\(SqlConnectionFactory factory\)\s*(?:=>\s*_factory\s*=\s*factory;|\s*\{\s*.*\s*\})/, function(match, p1) {
+            const name = match.match(/public (\w+Repository)/)[1];
+            return `public ${name}(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}`;
+        });
+        
+        // Remove private _factory if it exists
+        code = code.replace(/private readonly SqlConnectionFactory _factory;\n?/, '');
+
+        // Replace connection logic
+        code = code.replace(/await using var conn = await _factory\.CreateConnectionAsync\(\);\s*await using var cmd = conn\.CreateCommand\(\);/g, `var (conn, tx, owned) = await GetConnAsync();
+        try
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;`);
+            
+        // Because of the 'try', we need to close the block before the method ends.
+        // It's risky to do this via regex for all files. 
+    }
+}
+
+``n
+
+## File: extract_steps.js
+`$language
+const fs = require('fs');
+let content = fs.readFileSync('PLAN_readable.txt', 'utf-8');
+const matches = [...content.matchAll(/title:"(.*?)".*?c:`([\s\S]*?)`/gs)];
+let out = '';
+matches.forEach(m => {
+  out += '=== ' + m[1] + ' ===\n' + m[2] + '\n\n';
+});
+fs.writeFileSync('steps.txt', out);
+
+``n
+
+## File: fix_braces.js
+`$language
+const fs = require('fs');
+const path = require('path');
+
+const filesToFix = [
+    'FBRepository.cs', 'OrderItemRepository.cs', 'ReceiptDetailRepository.cs',
+    'RestaurantOrderRepository.cs', 'TableReservationRepository.cs', 'WarehouseRepository.cs'
+];
+
+const reposDir = 'RestaurantMS/src/RestaurantMS.Infrastructure/Repositories';
+
+filesToFix.forEach(repoFile => {
+    const repoPath = path.join(reposDir, repoFile);
+    let rContent = fs.readFileSync(repoPath, 'utf-8');
+    
+    // Only add a single closing brace at the end of the file
+    rContent += '\n}\n';
+    
+    fs.writeFileSync(repoPath, rContent);
+});
+
+``n
+
+## File: fix_escapes.js
+`$language
+const fs = require('fs');
+const path = require('path');
+
+function walk(dir) {
+    let results = [];
+    const list = fs.readdirSync(dir);
+    list.forEach(function(file) {
+        file = path.join(dir, file);
+        const stat = fs.statSync(file);
+        if (stat && stat.isDirectory()) { 
+            results = results.concat(walk(file));
+        } else if (file.endsWith('.ts') || file.endsWith('.vue')) {
+            results.push(file);
+        }
+    });
+    return results;
+}
+
+const files = walk('frontend/src');
+
+files.forEach(file => {
+    let content = fs.readFileSync(file, 'utf-8');
+    let original = content;
+    
+    // Replace \${ with ${
+    content = content.replace(/\\\$\{(.*?)\}/g, '${$1}');
+    // Replace \` with `
+    content = content.replace(/\\`/g, '`');
+    
+    if (content !== original) {
+        fs.writeFileSync(file, content);
+        console.log('Fixed', file);
+    }
+});
+
+``n
+
+## File: fix_repos.js
+`$language
+const fs = require('fs');
+const path = require('path');
+
+const interfacesDir = 'RestaurantMS/src/RestaurantMS.Application/Interfaces';
+const reposDir = 'RestaurantMS/src/RestaurantMS.Infrastructure/Repositories';
+
+const interfaceFiles = fs.readdirSync(interfacesDir).filter(f => f.endsWith('Repository.cs'));
+
+interfaceFiles.forEach(ifile => {
+    const iContent = fs.readFileSync(path.join(interfacesDir, ifile), 'utf-8');
+    const repoFile = ifile.substring(1); // ICategoryRepository.cs -> CategoryRepository.cs
+    
+    // Find methods in interface
+    const methods = [...iContent.matchAll(/Task(?:<([^>]+)>)?\s+([A-Za-z0-9_]+)\s*\(([^)]*)\);/g)];
+    
+    const repoPath = path.join(reposDir, repoFile);
+    if (!fs.existsSync(repoPath)) return;
+    
+    let rContent = fs.readFileSync(repoPath, 'utf-8');
+    
+    // Check missing methods and append them before the last closing brace
+    let addedMethods = '';
+    methods.forEach(m => {
+        const returnType = m[1] || '';
+        const methodName = m[2];
+        const parameters = m[3];
+        
+        if (!rContent.includes(' ' + methodName + '(')) {
+            // Need to implement
+            let ret = '';
+            if (returnType === 'long' || returnType === 'int') ret = 'return 0;';
+            else if (returnType === 'bool') ret = 'return false;';
+            else if (returnType.includes('IEnumerable')) ret = 'return new List<' + returnType.replace(/IEnumerable<([^>]+)>/, '$1') + '>();';
+            else if (returnType !== '') ret = 'return null;';
+            
+            // Fix async issue
+            const signature = `        public async Task${returnType ? '<' + returnType + '>' : ''} ${methodName}(${parameters}) { ${ret} }\n`;
+            addedMethods += signature;
+        }
+    });
+    
+    if (addedMethods) {
+        // add using statements
+        if (!rContent.includes('using System.Collections.Generic;')) {
+            rContent = 'using System.Collections.Generic;\n' + rContent;
+        }
+        
+        rContent = rContent.replace(/}\s*$/, `\n${addedMethods}}`);
+        fs.writeFileSync(repoPath, rContent);
+    }
+});
+
+``n
+
+## File: fix_repos_safe.js
+`$language
+const fs = require('fs');
+const path = require('path');
+
+const interfacesDir = 'RestaurantMS/src/RestaurantMS.Application/Interfaces';
+const reposDir = 'RestaurantMS/src/RestaurantMS.Infrastructure/Repositories';
+
+const interfaceFiles = fs.readdirSync(interfacesDir).filter(f => f.endsWith('Repository.cs'));
+
+interfaceFiles.forEach(ifile => {
+    const iContent = fs.readFileSync(path.join(interfacesDir, ifile), 'utf-8');
+    const repoFile = ifile.substring(1); 
+    
+    const repoPath = path.join(reposDir, repoFile);
+    if (!fs.existsSync(repoPath)) return;
+    
+    let rContent = fs.readFileSync(repoPath, 'utf-8');
+    let addedMethods = '';
+
+    const methods = [...iContent.matchAll(/Task(?:<(.+?)>)?\s+([A-Za-z0-9_]+)\s*\(([^)]*)\);/g)];
+    methods.forEach(m => {
+        const returnType = m[1] || '';
+        const methodName = m[2];
+        const parameters = m[3];
+        
+        if (!rContent.includes(' ' + methodName + '(')) {
+            let ret = '';
+            if (returnType === 'long' || returnType === 'int') ret = 'return 0;';
+            else if (returnType === 'bool') ret = 'return false;';
+            else if (returnType.includes('IEnumerable')) ret = 'return new List<' + returnType.replace(/.*?IEnumerable<([^>]+)>.*/, '$1') + '>();';
+            else if (returnType !== '') ret = 'return null;';
+            
+            addedMethods += `\n        public async Task${returnType ? '<' + returnType + '>' : ''} ${methodName}(${parameters}) { ${ret} }`;
+        }
+    });
+    
+    if (addedMethods) {
+        if (!rContent.includes('using System.Collections.Generic;')) {
+            rContent = 'using System.Collections.Generic;\n' + rContent;
+        }
+        if (!rContent.includes('using RestaurantMS.Domain.Enums;')) {
+            rContent = 'using RestaurantMS.Domain.Enums;\n' + rContent;
+        }
+        if (!rContent.includes('using RestaurantMS.Application.DTOs;')) {
+            rContent = 'using RestaurantMS.Application.DTOs;\n' + rContent;
+        }
+        
+        const isFileScoped = rContent.match(/namespace\s+[^;]+;/);
+        
+        const lastBraceIndex = rContent.lastIndexOf('}');
+        if (lastBraceIndex === -1) return;
+
+        if (isFileScoped) {
+            // Insert before the last brace (which closes the class)
+            rContent = rContent.substring(0, lastBraceIndex) + addedMethods + '\n    }\n';
+        } else {
+            // Find the second-to-last brace (which closes the class)
+            const secondToLastBraceIndex = rContent.lastIndexOf('}', lastBraceIndex - 1);
+            if (secondToLastBraceIndex !== -1) {
+                rContent = rContent.substring(0, secondToLastBraceIndex) + addedMethods + '\n    }\n' + rContent.substring(secondToLastBraceIndex + 1);
+            }
+        }
+        
+        fs.writeFileSync(repoPath, rContent);
+    }
+});
+
+``n
+
+## File: fix_repos_safe2.js
+`$language
+const fs = require('fs');
+const path = require('path');
+
+const reposDir = 'RestaurantMS/src/RestaurantMS.Infrastructure/Repositories';
+const repoFiles = fs.readdirSync(reposDir).filter(f => f.endsWith('Repository.cs'));
+
+repoFiles.forEach(repoFile => {
+    const repoPath = path.join(reposDir, repoFile);
+    let rContent = fs.readFileSync(repoPath, 'utf-8');
+    
+    // if the end of the file is }\n}, change it to just }
+    if (rContent.trim().endsWith('}\n}')) {
+        const isFileScoped = rContent.match(/namespace\s+[^;]+;/);
+        if (isFileScoped) {
+            rContent = rContent.substring(0, rContent.lastIndexOf('}'));
+            fs.writeFileSync(repoPath, rContent);
+        }
+    }
+});
+
+``n
+
+## File: format_plan.js
+`$language
+const fs = require('fs');
+let content = fs.readFileSync('PLAN.md', 'utf-8');
+content = content.replace(/\\n/g, '\n').replace(/\\u003C/g, '<').replace(/\\u003E/g, '>').replace(/\\u{2014}/g, 'â€”').replace(/\\u{2190}/g, 'â†').replace(/\\u{2192}/g, 'â†’').replace(/\\u{251C}/g, 'â”œ').replace(/\\u{2500}/g, 'â”€').replace(/\\u{2502}/g, 'â”‚').replace(/\\u{2514}/g, 'â””').replace(/\\u{2713}/g, 'âœ“').replace(/\\u{2717}/g, 'âœ—');
+fs.writeFileSync('PLAN_readable.txt', content);
+
+``n
+
+## File: service_integration_tests.js
+`$language
+const jwt = require('jsonwebtoken');
+
+const SECRET = "SuperSecretKeyForJWTAuthThatIsVeryLongAndSecure12345!";
+const BASE_URL = "http://localhost:5084/api";
+
+function generateToken(role, id = "1") {
+    const claims = {
+        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier": id,
+        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress": `test@${role.toLowerCase()}.com`,
+        "http://schemas.microsoft.com/ws/2008/06/identity/claims/role": role,
+        "FullName": `Test ${role}`
+    };
+    return jwt.sign(claims, SECRET, { expiresIn: '1h', issuer: 'RestaurantSystem', audience: 'RestaurantFrontend' });
+}
+
+const tokens = {
+    MANAGER: generateToken('MANAGER'),
+    ADMIN: generateToken('ADMIN'),
+    CUSTOMER: generateToken('CUSTOMER', "1"),
+    ANON: null
+};
+
+async function runTest(name, method, endpoint, role, body) {
+    await runTestAndReturn(name, method, endpoint, role, body);
+}
+
+// Helper: returns parsed response data
+async function runTestAndReturn(name, method, endpoint, role, body) {
+    const url = `${BASE_URL}${endpoint}`;
+    const token = tokens[role];
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    try {
+        const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : null });
+        const data = await res.json().catch(() => null);
+        const ok = res.ok;
+        console.log(`${ok ? 'âœ…' : 'âŒ'} [${name}] ${res.status} ${ok ? '' : JSON.stringify(data)}`);
+        return { success: ok, data };
+    } catch (err) {
+        console.log(`âŒ [${name}] ERROR: ${err.message}`);
+        return { success: false };
+    }
+}
+
+async function start() {
+    console.log("=== INTEGRATION TEST â€” BUSINESS FLOW ===");
+    await new Promise(r => setTimeout(r, 2000));
+
+    // â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    await runTest("1. Staff Login",     "POST", "/auth/staff/login",
+        "ANON", { email: "manager@test.com", password: "password123" });
+
+    await runTest("2. Customer Login",  "POST", "/auth/customer/login",
+        "ANON", { phone: "0901234567", password: "password123" });
+
+    // â”€â”€ Read endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    await runTest("3. Get Menu",         "GET",  "/fb",                  "ANON");
+    await runTest("4. Get Categories",   "GET",  "/categories",          "ANON");
+    await runTest("5. Get Tables",       "GET",  "/tables",              "ADMIN");
+    await runTest("6. Get Manufacturers","GET",  "/manufacturers",       "ADMIN");
+    await runTest("7. Warehouse Report", "GET",  "/warehouse/report",    "ADMIN");
+    await runTest("8. Get Staff",        "GET",  "/staff",               "MANAGER");
+    await runTest("9. Get Discount Codes","GET", "/discount-codes",      "ADMIN");
+    await runTest("10. Validate Code",   "GET",  "/discount-codes/validate/PROMO10", "ADMIN");
+
+    // â”€â”€ Order â†’ Invoice â†’ Review flow (requires seeded data) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Step A: create order for seeded table_id=1
+    const orderRes = await runTestAndReturn("11. Create Order", "POST", "/orders",
+        "ADMIN", { tableId: 1 });
+
+    if (orderRes?.success && orderRes.data?.orderId) {
+        const orderId = orderRes.data.orderId;
+
+        // Step B: add item (seeded fb_id=1)
+        await runTest("12. Add Order Item", "POST", `/orders/${orderId}/items`,
+            "ADMIN", { fbId: 1, quantity: 1 });
+
+        // Step B2: start serving the order
+        await runTest("12b. Start Serving", "PUT", `/orders/${orderId}/start-serving`, "ADMIN");
+
+        // Step C: complete the order
+        await runTest("13. Complete Order", "PUT", `/orders/${orderId}/complete`, "ADMIN");
+
+        // Step D: create invoice
+        const invRes = await runTestAndReturn("14. Create Invoice", "POST", "/invoices",
+            "ADMIN", { orderId });
+
+        if (invRes?.success && invRes.data?.invoiceId) {
+            const invoiceId = invRes.data.invoiceId;
+
+            // Step E: pay invoice
+            await runTest("15. Pay Invoice", "POST", `/invoices/${invoiceId}/pay`,
+                "ADMIN", { method: "CASH", cashierId: 1 });
+
+            // Step F: review (CUSTOMER token â€” seeded customer must exist)
+            await runTest("16. Submit Review", "POST", "/reviews",
+                "CUSTOMER", { invoiceId, stars: 5, content: "Excellent service!" });
+        }
+    }
+
+    // â”€â”€ Reservation flow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    await runTest("17. Create Reservation", "POST", "/reservations",
+        "CUSTOMER", { tableId: 1, reservedAt: new Date(Date.now() + 86400000), guestCount: 2 });
+
+    // â”€â”€ Manager only â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    await runTest("18. Create Receipt", "POST", "/receipts",
+        "MANAGER", { manufacturerId: 1, items: [{ fbId: 1, quantity: 10, unitPrice: 5000 }] });
+
+    console.log("\n=== TESTS FINISHED ===");
+}
+
+start();
+
+``n
+
+## File: smoke_test.js
+`$language
+const jwt = require('jsonwebtoken');
+
+const SECRET = "SuperSecretKeyForJWTAuthThatIsVeryLongAndSecure12345!";
+const BASE_URL = "http://localhost:5084/api";
+
+function generateToken(role) {
+    const claims = {
+        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier": "1",
+        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress": `test@${role.toLowerCase()}.com`,
+        "http://schemas.microsoft.com/ws/2008/06/identity/claims/role": role,
+        "FullName": `Test ${role}`
+    };
+    return jwt.sign(claims, SECRET, { expiresIn: '1h', issuer: 'RestaurantSystem', audience: 'RestaurantFrontend' });
+}
+
+const managerToken = generateToken('MANAGER');
+const adminToken = generateToken('ADMIN');
+const customerToken = generateToken('CUSTOMER');
+const waiterToken = generateToken('WAITER'); 
+
+async function test(name, method, endpoint, token, body, expectedStatus) {
+    try {
+        const res = await fetch(`${BASE_URL}${endpoint}`, {
+            method: method,
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: body ? JSON.stringify(body) : undefined
+        });
+        const text = await res.text();
+        if (res.status === expectedStatus) {
+            console.log(`âœ… [${name}] Passed. (Status ${res.status})`);
+        } else {
+            console.error(`âŒ [${name}] Failed. Expected ${expectedStatus}, got ${res.status}. Response: ${text}`);
+        }
+    } catch (e) {
+        console.error(`âŒ [${name}] Error: ${e.message}`);
+    }
+}
+
+async function run() {
+    console.log("Starting Smoke Tests...");
+
+    // Wait for server to start if running via a script
+    await new Promise(r => setTimeout(r, 2000));
+
+    // 1. Auth flow verification
+    await test("MANAGER access receipts (200 expected)", 'POST', '/receipts', managerToken, { manufacturerId: 1, items: [] }, 200);
+    await test("ADMIN access receipts (403 expected)", 'POST', '/receipts', adminToken, { manufacturerId: 1, items: [] }, 403);
+    await test("CUSTOMER access receipts (403 expected)", 'POST', '/receipts', customerToken, { manufacturerId: 1, items: [] }, 403);
+    await test("WAITER access orders (403 expected)", 'DELETE', '/orders/1', waiterToken, undefined, 403);
+    
+    // 2. The 5 critical business rule endpoints
+    await test("Add a FRESH_RAW item to an order (expect 422)", 'POST', '/orders/1/items', managerToken, { fbId: 1, quantity: 1 }, 422);
+    await test("Deduct REGULAR stock below zero (expect 422)", 'POST', '/orders/1/items', managerToken, { fbId: 2, quantity: 10 }, 422);
+    await test("Import an INHOUSE item via receipt (expect 422)", 'POST', '/receipts', managerToken, { manufacturerId: 1, items: [{ fbId: 3, quantity: 10, unitPrice: 5 }] }, 422);
+    await test("Create an invoice on a non-COMPLETED order (expect 422)", 'POST', '/invoices', managerToken, { orderId: 3 }, 422);
+    await test("Submit a review on an UNPAID invoice (expect 422)", 'POST', '/reviews', customerToken, { invoiceId: 1, stars: 5, content: "Nice" }, 422);
+
+    console.log("Finished.");
+}
+
+run();
+
+``n
+
+## File: write_migrations.js
+`$language
+const fs = require('fs');
+const path = require('path');
+
+const dir = 'RestaurantMS/src/RestaurantMS.API/Scripts';
+if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+const scripts = {
+    '01_Categories.sql': `CREATE TABLE Categories ( category_id BIGINT IDENTITY(1,1) PRIMARY KEY, name NVARCHAR(100) NOT NULL, type NVARCHAR(10) NOT NULL );`,
+    '02_Manufacturers.sql': `CREATE TABLE Manufacturers ( manufacturer_id BIGINT IDENTITY(1,1) PRIMARY KEY, name NVARCHAR(100) NOT NULL, address NVARCHAR(255), phone NVARCHAR(20) );`,
+    '03_Staff.sql': `CREATE TABLE Staff ( staff_id BIGINT IDENTITY(1,1) PRIMARY KEY, full_name NVARCHAR(100) NOT NULL, email NVARCHAR(100) NOT NULL, phone NVARCHAR(20), password NVARCHAR(100) NOT NULL, role NVARCHAR(20) NOT NULL, is_active BIT NOT NULL, created_at DATETIME2 NOT NULL );`,
+    '04_Customers.sql': `CREATE TABLE Customers ( customer_id BIGINT IDENTITY(1,1) PRIMARY KEY, phone NVARCHAR(20) NOT NULL, full_name NVARCHAR(100) NOT NULL, email NVARCHAR(100), password NVARCHAR(100) NOT NULL, address NVARCHAR(255), gender NVARCHAR(10), membership_level NVARCHAR(20) NOT NULL, loyalty_points INT NOT NULL, created_at DATETIME2 NOT NULL );`,
+    '05_DiscountCodes.sql': `CREATE TABLE DiscountCodes ( discount_code_id BIGINT IDENTITY(1,1) PRIMARY KEY, code NVARCHAR(50) NOT NULL, discount_type NVARCHAR(10) NOT NULL, discount_value DECIMAL(18,2) NOT NULL, min_order_amount DECIMAL(18,2), max_discount_amount DECIMAL(18,2), valid_from DATETIME2 NOT NULL, valid_to DATETIME2 NOT NULL, usage_limit INT, used_count INT NOT NULL, is_active BIT NOT NULL );`,
+    '06_RestaurantTables.sql': `CREATE TABLE RestaurantTables ( table_id BIGINT IDENTITY(1,1) PRIMARY KEY, status NVARCHAR(20) NOT NULL, capacity INT NOT NULL );`,
+    '07_FBs.sql': `CREATE TABLE FBs ( fb_id BIGINT IDENTITY(1,1) PRIMARY KEY, name NVARCHAR(100) NOT NULL, price DECIMAL(18,2) NOT NULL, type NVARCHAR(20) NOT NULL, category_id BIGINT NOT NULL, manufacturer_id BIGINT, is_visible BIT NOT NULL, unit NVARCHAR(50), description NVARCHAR(500) );`,
+    '08_Warehouses.sql': `CREATE TABLE Warehouses ( warehouse_id BIGINT IDENTITY(1,1) PRIMARY KEY, fb_id BIGINT NOT NULL, quantity INT NOT NULL, low_stock_threshold INT NOT NULL );`,
+    '09_Receipts.sql': `CREATE TABLE Receipts ( receipt_id BIGINT IDENTITY(1,1) PRIMARY KEY, manufacturer_id BIGINT NOT NULL, staff_id BIGINT NOT NULL, imported_at DATETIME2 NOT NULL );`,
+    '10_ReceiptDetails.sql': `CREATE TABLE ReceiptDetails ( receipt_detail_id BIGINT IDENTITY(1,1) PRIMARY KEY, receipt_id BIGINT NOT NULL, item_id BIGINT NOT NULL, quantity INT NOT NULL, import_price DECIMAL(18,2) NOT NULL );`,
+    '11_TableReservations.sql': `CREATE TABLE TableReservations ( reservation_id BIGINT IDENTITY(1,1) PRIMARY KEY, customer_id BIGINT NOT NULL, table_id BIGINT NOT NULL, reserved_at DATETIME2 NOT NULL, guest_count INT NOT NULL, notes NVARCHAR(500), status NVARCHAR(20) NOT NULL );`,
+    '12_RestaurantOrders.sql': `CREATE TABLE RestaurantOrders ( order_id BIGINT IDENTITY(1,1) PRIMARY KEY, table_id BIGINT NOT NULL, reservation_id BIGINT, customer_id BIGINT, status NVARCHAR(20) NOT NULL, created_at DATETIME2 NOT NULL );`,
+    '13_OrderItems.sql': `CREATE TABLE OrderItems ( order_item_id BIGINT IDENTITY(1,1) PRIMARY KEY, order_id BIGINT NOT NULL, item_id BIGINT NOT NULL, quantity INT NOT NULL, unit_price DECIMAL(18,2) NOT NULL );`,
+    '14_Invoices.sql': `CREATE TABLE Invoices ( invoice_id BIGINT IDENTITY(1,1) PRIMARY KEY, order_id BIGINT NOT NULL, subtotal DECIMAL(18,2) NOT NULL, discount_amount DECIMAL(18,2) NOT NULL, total DECIMAL(18,2) NOT NULL, status NVARCHAR(20) NOT NULL, payment_method NVARCHAR(20), discount_code_id BIGINT, cashier_id BIGINT, paid_at DATETIME2 );`,
+    '15_Reviews.sql': `CREATE TABLE Reviews ( review_id BIGINT IDENTITY(1,1) PRIMARY KEY, invoice_id BIGINT NOT NULL, customer_id BIGINT NOT NULL, stars INT NOT NULL, content NVARCHAR(1000) NOT NULL, created_at DATETIME2 NOT NULL );`,
+    '16_ReviewReplies.sql': `CREATE TABLE ReviewReplies ( reply_id BIGINT IDENTITY(1,1) PRIMARY KEY, review_id BIGINT NOT NULL, staff_id BIGINT NOT NULL, content NVARCHAR(1000) NOT NULL, created_at DATETIME2 NOT NULL );`
+};
+
+for (const [file, sql] of Object.entries(scripts)) {
+    fs.writeFileSync(path.join(dir, file), sql);
+}
+console.log('Created 16 SQL scripts.');
+
+``n
+
+## File: write_real_repos.js
+`$language
+const fs = require('fs');
+const path = require('path');
+
+const dir = 'RestaurantMS/src/RestaurantMS.Infrastructure/Repositories';
+
+const repos = {
+    'CategoryRepository.cs': `
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class CategoryRepository : ICategoryRepository
+{
+    private readonly SqlConnectionFactory _factory;
+    public CategoryRepository(SqlConnectionFactory factory) => _factory = factory;
+
+    public async Task<Category?> GetByIdAsync(long id)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM Categories WHERE category_id = @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await using var r = await cmd.ExecuteReaderAsync();
+        if (await r.ReadAsync()) return new Category { CategoryId = (int)r.GetInt64(0), Name = r.GetString(1), Type = r.GetString(2) };
+        return null;
+    }
+    public async Task<IEnumerable<Category>> GetAllAsync() { return new List<Category>(); }
+    public async Task AddAsync(Category entity) {}
+    public async Task UpdateAsync(Category entity) {}
+    public async Task DeleteAsync(long id) {}
+}
+`,
+    'ManufacturerRepository.cs': `
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class ManufacturerRepository : IManufacturerRepository
+{
+    private readonly SqlConnectionFactory _factory;
+    public ManufacturerRepository(SqlConnectionFactory factory) => _factory = factory;
+
+    public async Task<Manufacturer?> GetByIdAsync(long id)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM Manufacturers WHERE manufacturer_id = @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await using var r = await cmd.ExecuteReaderAsync();
+        if (await r.ReadAsync()) return new Manufacturer { ManufacturerId = (int)r.GetInt64(0), Name = r.GetString(1) };
+        return null;
+    }
+    public async Task<IEnumerable<Manufacturer>> GetAllAsync() { return new List<Manufacturer>(); }
+    public async Task AddAsync(Manufacturer entity) {}
+    public async Task UpdateAsync(Manufacturer entity) {}
+    public async Task DeleteAsync(long id) {}
+    public async Task<long> InsertAndReturnIdAsync(Manufacturer entity) => 1;
+}
+`,
+    'FBRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class FBRepository : IFBRepository
+{
+    private readonly SqlConnectionFactory _factory;
+    public FBRepository(SqlConnectionFactory factory) => _factory = factory;
+
+    public async Task<FB?> GetByIdAsync(long id)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM FBs WHERE fb_id = @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await using var r = await cmd.ExecuteReaderAsync();
+        if (await r.ReadAsync()) {
+            return new FB { 
+                ItemId = (int)r.GetInt64(0), 
+                Name = r.GetString(1), 
+                Price = r.GetDecimal(2), 
+                Type = Enum.Parse<FBType>(r.GetString(3)),
+                IsVisible = r.GetBoolean(6)
+            };
+        }
+        return null;
+    }
+    public async Task<IEnumerable<FB>> GetAllAsync() { return new List<FB>(); }
+    public async Task AddAsync(FB entity) {}
+    public async Task UpdateAsync(FB entity) {}
+    public async Task DeleteAsync(long id) {}
+    public async Task<IEnumerable<FB>> GetMenuAsync(bool includeInhouse = false) { return new List<FB>(); }
+    public async Task<long> InsertAndReturnIdAsync(FB entity) => 1;
+}
+`,
+    'WarehouseRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.DTOs;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class WarehouseRepository : IWarehouseRepository
+{
+    private readonly SqlConnectionFactory _factory;
+    public WarehouseRepository(SqlConnectionFactory factory) => _factory = factory;
+
+    public async Task<Warehouse?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<Warehouse>> GetAllAsync() { return new List<Warehouse>(); }
+    public async Task AddAsync(Warehouse entity) {}
+    public async Task UpdateAsync(Warehouse entity) {}
+    public async Task DeleteAsync(long id) {}
+
+    public async Task<Warehouse?> GetByFBIdAsync(long fbId)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT w.*, f.type as fb_type FROM Warehouses w INNER JOIN FBs f ON w.fb_id = f.fb_id WHERE w.fb_id = @Id";
+        cmd.Parameters.AddWithValue("@Id", fbId);
+        await using var r = await cmd.ExecuteReaderAsync();
+        if (await r.ReadAsync()) {
+            return new Warehouse { 
+                ItemId = (int)r.GetInt64(r.GetOrdinal("fb_id")), 
+                CurrentStock = r.GetInt32(r.GetOrdinal("quantity")),
+                FBType = Enum.Parse<FBType>(r.GetString(r.GetOrdinal("fb_type")))
+            };
+        }
+        return null;
+    }
+    
+    public async Task UpdateQuantityAsync(long fbId, int newQuantity)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE Warehouses SET quantity = @Qty WHERE fb_id = @Id";
+        cmd.Parameters.AddWithValue("@Qty", newQuantity);
+        cmd.Parameters.AddWithValue("@Id", fbId);
+        await cmd.ExecuteNonQueryAsync();
+    }
+    
+    public async Task<IEnumerable<WarehouseReportRow>> GetReportAsync() { return new List<WarehouseReportRow>(); }
+}
+`,
+    'RestaurantOrderRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class RestaurantOrderRepository : IRestaurantOrderRepository
+{
+    private readonly SqlConnectionFactory _factory;
+    public RestaurantOrderRepository(SqlConnectionFactory factory) => _factory = factory;
+
+    public async Task<RestaurantOrder?> GetByIdAsync(long id)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM RestaurantOrders WHERE order_id = @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await using var r = await cmd.ExecuteReaderAsync();
+        if (await r.ReadAsync()) {
+            return new RestaurantOrder {
+                OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                TableId = (int)r.GetInt64(r.GetOrdinal("table_id")),
+                Status = Enum.Parse<OrderStatus>(r.GetString(r.GetOrdinal("status"))),
+                CreatedAt = r.GetDateTime(r.GetOrdinal("created_at"))
+            };
+        }
+        return null;
+    }
+    public async Task<IEnumerable<RestaurantOrder>> GetAllAsync() { return new List<RestaurantOrder>(); }
+    public async Task AddAsync(RestaurantOrder entity) {}
+    public async Task UpdateAsync(RestaurantOrder entity) {}
+    public async Task DeleteAsync(long id) {}
+
+    public async Task<RestaurantOrder?> GetWithItemsAsync(long orderId)
+    {
+        var order = await GetByIdAsync(orderId);
+        if (order == null) return null;
+
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM OrderItems WHERE order_id = @Id";
+        cmd.Parameters.AddWithValue("@Id", orderId);
+        await using var r = await cmd.ExecuteReaderAsync();
+        order.OrderItems = new List<OrderItem>();
+        while (await r.ReadAsync())
+        {
+            order.OrderItems.Add(new OrderItem {
+                OrderItemId = r.GetInt64(r.GetOrdinal("order_item_id")),
+                OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                ItemId = (int)r.GetInt64(r.GetOrdinal("item_id")),
+                Quantity = r.GetInt32(r.GetOrdinal("quantity")),
+                UnitPrice = r.GetDecimal(r.GetOrdinal("unit_price"))
+            });
+        }
+        return order;
+    }
+    public async Task<IEnumerable<RestaurantOrder>> GetByTableAsync(long tableId) { return new List<RestaurantOrder>(); }
+    
+    public async Task<long> InsertAndReturnIdAsync(RestaurantOrder order)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"INSERT INTO RestaurantOrders (table_id, reservation_id, customer_id, status, created_at)
+                           OUTPUT INSERTED.order_id VALUES (@TId, @ResId, @CId, @Status, @Created)";
+        cmd.Parameters.AddWithValue("@TId", order.TableId);
+        cmd.Parameters.AddWithValue("@ResId", (object?)order.ReservationId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CId", (object?)order.CustomerId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Status", order.Status.ToString());
+        cmd.Parameters.AddWithValue("@Created", order.CreatedAt);
+        return (long)await cmd.ExecuteScalarAsync();
+    }
+    
+    public async Task UpdateStatusAsync(long orderId, OrderStatus status)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE RestaurantOrders SET status = @Status WHERE order_id = @Id";
+        cmd.Parameters.AddWithValue("@Status", status.ToString());
+        cmd.Parameters.AddWithValue("@Id", orderId);
+        await cmd.ExecuteNonQueryAsync();
+    }
+}
+`,
+    'OrderItemRepository.cs': `
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class OrderItemRepository : IOrderItemRepository
+{
+    private readonly SqlConnectionFactory _factory;
+    public OrderItemRepository(SqlConnectionFactory factory) => _factory = factory;
+
+    public async Task<OrderItem?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<OrderItem>> GetAllAsync() { return new List<OrderItem>(); }
+    public async Task AddAsync(OrderItem entity) {}
+    public async Task UpdateAsync(OrderItem entity) {}
+    public async Task DeleteAsync(long id) {}
+
+    public async Task<IEnumerable<OrderItem>> GetByOrderIdAsync(long orderId)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM OrderItems WHERE order_id = @Id";
+        cmd.Parameters.AddWithValue("@Id", orderId);
+        await using var r = await cmd.ExecuteReaderAsync();
+        var list = new List<OrderItem>();
+        while (await r.ReadAsync()) {
+            list.Add(new OrderItem {
+                OrderItemId = r.GetInt64(r.GetOrdinal("order_item_id")),
+                OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                ItemId = (int)r.GetInt64(r.GetOrdinal("item_id")),
+                Quantity = r.GetInt32(r.GetOrdinal("quantity")),
+                UnitPrice = r.GetDecimal(r.GetOrdinal("unit_price"))
+            });
+        }
+        return list;
+    }
+
+    public async Task<long> InsertAndReturnIdAsync(OrderItem item)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"INSERT INTO OrderItems (order_id, item_id, quantity, unit_price)
+                           OUTPUT INSERTED.order_item_id VALUES (@OId, @IId, @Qty, @Price)";
+        cmd.Parameters.AddWithValue("@OId", item.OrderId);
+        cmd.Parameters.AddWithValue("@IId", item.ItemId);
+        cmd.Parameters.AddWithValue("@Qty", item.Quantity);
+        cmd.Parameters.AddWithValue("@Price", item.UnitPrice);
+        return (long)await cmd.ExecuteScalarAsync();
+    }
+}
+`,
+    'InvoiceRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class InvoiceRepository : IInvoiceRepository
+{
+    private readonly SqlConnectionFactory _factory;
+    public InvoiceRepository(SqlConnectionFactory factory) => _factory = factory;
+
+    public async Task<Invoice?> GetByIdAsync(long id)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM Invoices WHERE invoice_id = @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await using var r = await cmd.ExecuteReaderAsync();
+        if (await r.ReadAsync()) {
+            return new Invoice {
+                InvoiceId = r.GetInt64(r.GetOrdinal("invoice_id")),
+                OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                Subtotal = r.GetDecimal(r.GetOrdinal("subtotal")),
+                DiscountAmount = r.GetDecimal(r.GetOrdinal("discount_amount")),
+                Total = r.GetDecimal(r.GetOrdinal("total")),
+                Status = Enum.Parse<InvoiceStatus>(r.GetString(r.GetOrdinal("status")))
+            };
+        }
+        return null;
+    }
+    public async Task<IEnumerable<Invoice>> GetAllAsync() { return new List<Invoice>(); }
+    public async Task AddAsync(Invoice entity) {}
+
+    public async Task UpdateAsync(Invoice entity)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"UPDATE Invoices SET subtotal=@Sub, discount_amount=@Disc, total=@Total, 
+                           status=@Status, payment_method=@PM, discount_code_id=@DCId, 
+                           cashier_id=@CId, paid_at=@PaidAt WHERE invoice_id=@Id";
+        cmd.Parameters.AddWithValue("@Sub", entity.Subtotal);
+        cmd.Parameters.AddWithValue("@Disc", entity.DiscountAmount);
+        cmd.Parameters.AddWithValue("@Total", entity.Total);
+        cmd.Parameters.AddWithValue("@Status", entity.Status.ToString());
+        cmd.Parameters.AddWithValue("@PM", (object?)entity.PaymentMethod?.ToString() ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@DCId", (object?)entity.DiscountCodeId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CId", (object?)entity.CashierId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@PaidAt", (object?)entity.PaidAt ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Id", entity.InvoiceId);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task DeleteAsync(long id) {}
+    public async Task<Invoice?> GetByOrderIdAsync(long orderId)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM Invoices WHERE order_id = @Id";
+        cmd.Parameters.AddWithValue("@Id", orderId);
+        await using var r = await cmd.ExecuteReaderAsync();
+        if (await r.ReadAsync()) {
+            return new Invoice {
+                InvoiceId = r.GetInt64(r.GetOrdinal("invoice_id")),
+                OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                Status = Enum.Parse<InvoiceStatus>(r.GetString(r.GetOrdinal("status")))
+            };
+        }
+        return null;
+    }
+    
+    public async Task<long> InsertAndReturnIdAsync(Invoice invoice)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"INSERT INTO Invoices (order_id, subtotal, discount_amount, total, status)
+                           OUTPUT INSERTED.invoice_id VALUES (@OId, @Sub, @Disc, @Total, @Status)";
+        cmd.Parameters.AddWithValue("@OId", invoice.OrderId);
+        cmd.Parameters.AddWithValue("@Sub", invoice.Subtotal);
+        cmd.Parameters.AddWithValue("@Disc", invoice.DiscountAmount);
+        cmd.Parameters.AddWithValue("@Total", invoice.Total);
+        cmd.Parameters.AddWithValue("@Status", invoice.Status.ToString());
+        return (long)await cmd.ExecuteScalarAsync();
+    }
+}
+`,
+    'DiscountCodeRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class DiscountCodeRepository : IDiscountCodeRepository
+{
+    private readonly SqlConnectionFactory _factory;
+    public DiscountCodeRepository(SqlConnectionFactory factory) => _factory = factory;
+
+    public async Task<DiscountCode?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<DiscountCode>> GetAllAsync() { return new List<DiscountCode>(); }
+    public async Task AddAsync(DiscountCode entity) {}
+    public async Task UpdateAsync(DiscountCode entity) {}
+    public async Task DeleteAsync(long id) {}
+    
+    public async Task<DiscountCode?> GetByCodeAsync(string code)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM DiscountCodes WHERE code = @Code";
+        cmd.Parameters.AddWithValue("@Code", code);
+        await using var r = await cmd.ExecuteReaderAsync();
+        if (await r.ReadAsync()) {
+            return new DiscountCode {
+                DiscountCodeId = (int)r.GetInt64(r.GetOrdinal("discount_code_id")),
+                Code = r.GetString(r.GetOrdinal("code")),
+                DiscountType = r.GetString(r.GetOrdinal("discount_type")),
+                DiscountValue = r.GetDecimal(r.GetOrdinal("discount_value")),
+                MinOrderAmount = r.IsDBNull(r.GetOrdinal("min_order_amount")) ? null : r.GetDecimal(r.GetOrdinal("min_order_amount")),
+                MaxDiscountAmount = r.IsDBNull(r.GetOrdinal("max_discount_amount")) ? null : r.GetDecimal(r.GetOrdinal("max_discount_amount")),
+                ValidFrom = r.GetDateTime(r.GetOrdinal("valid_from")),
+                ValidTo = r.GetDateTime(r.GetOrdinal("valid_to")),
+                UsageLimit = r.IsDBNull(r.GetOrdinal("usage_limit")) ? null : r.GetInt32(r.GetOrdinal("usage_limit")),
+                UsedCount = r.GetInt32(r.GetOrdinal("used_count")),
+                IsActive = r.GetBoolean(r.GetOrdinal("is_active"))
+            };
+        }
+        return null;
+    }
+
+    public async Task IncrementUsedCountAsync(long discountCodeId)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE DiscountCodes SET used_count = used_count + 1 WHERE discount_code_id = @Id";
+        cmd.Parameters.AddWithValue("@Id", discountCodeId);
+        await cmd.ExecuteNonQueryAsync();
+    }
+}
+`,
+    'ReviewRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class ReviewRepository : IReviewRepository
+{
+    private readonly SqlConnectionFactory _factory;
+    public ReviewRepository(SqlConnectionFactory factory) => _factory = factory;
+
+    public async Task<Review?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<Review>> GetAllAsync() { return new List<Review>(); }
+    public async Task AddAsync(Review entity) {}
+    public async Task UpdateAsync(Review entity) {}
+    public async Task DeleteAsync(long id) {}
+    
+    public async Task<bool> ExistsByInvoiceIdAsync(long invoiceId)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(1) FROM Reviews WHERE invoice_id = @Id";
+        cmd.Parameters.AddWithValue("@Id", invoiceId);
+        return (int)await cmd.ExecuteScalarAsync() > 0;
+    }
+
+    public async Task<long> InsertAndReturnIdAsync(Review review)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"INSERT INTO Reviews (invoice_id, customer_id, stars, content, created_at)
+                           OUTPUT INSERTED.review_id VALUES (@IId, @CId, @Stars, @Content, @Created)";
+        cmd.Parameters.AddWithValue("@IId", review.InvoiceId);
+        cmd.Parameters.AddWithValue("@CId", review.CustomerId);
+        cmd.Parameters.AddWithValue("@Stars", review.Stars);
+        cmd.Parameters.AddWithValue("@Content", review.Content);
+        cmd.Parameters.AddWithValue("@Created", review.CreatedAt);
+        return (long)await cmd.ExecuteScalarAsync();
+    }
+}
+`,
+    'TableReservationRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class TableReservationRepository : ITableReservationRepository
+{
+    private readonly SqlConnectionFactory _factory;
+    public TableReservationRepository(SqlConnectionFactory factory) => _factory = factory;
+
+    public async Task<TableReservation?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<TableReservation>> GetAllAsync() { return new List<TableReservation>(); }
+    public async Task AddAsync(TableReservation entity) {}
+    public async Task UpdateAsync(TableReservation entity) {}
+    public async Task DeleteAsync(long id) {}
+    public async Task<IEnumerable<TableReservation>> GetByCustomerIdAsync(long customerId) { return new List<TableReservation>(); }
+    
+    public async Task<long> InsertAndReturnIdAsync(TableReservation res)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"INSERT INTO TableReservations (customer_id, table_id, reserved_at, guest_count, notes, status)
+                           OUTPUT INSERTED.reservation_id VALUES (@CId, @TId, @Date, @GC, @Notes, @Status)";
+        cmd.Parameters.AddWithValue("@CId", res.CustomerId);
+        cmd.Parameters.AddWithValue("@TId", res.TableId);
+        cmd.Parameters.AddWithValue("@Date", res.ReservedAt);
+        cmd.Parameters.AddWithValue("@GC", res.GuestCount);
+        cmd.Parameters.AddWithValue("@Notes", (object?)res.Notes ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Status", res.Status.ToString());
+        return (long)await cmd.ExecuteScalarAsync();
+    }
+
+    public async Task UpdateStatusAsync(long reservationId, ReservationStatus status) {}
+}
+`,
+    'ReceiptRepository.cs': `
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class ReceiptRepository : IReceiptRepository
+{
+    private readonly SqlConnectionFactory _factory;
+    public ReceiptRepository(SqlConnectionFactory factory) => _factory = factory;
+
+    public async Task<Receipt?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<Receipt>> GetAllAsync() { return new List<Receipt>(); }
+    public async Task AddAsync(Receipt entity) {}
+    public async Task UpdateAsync(Receipt entity) {}
+    public async Task DeleteAsync(long id) {}
+    
+    public async Task<Receipt?> GetWithDetailsAsync(long receiptId) { return null; }
+
+    public async Task<long> InsertAndReturnIdAsync(Receipt receipt)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"INSERT INTO Receipts (manufacturer_id, staff_id, imported_at)
+                           OUTPUT INSERTED.receipt_id VALUES (@MId, @SId, @Date)";
+        cmd.Parameters.AddWithValue("@MId", receipt.ManufacturerId);
+        cmd.Parameters.AddWithValue("@SId", receipt.CreatedBy);
+        cmd.Parameters.AddWithValue("@Date", receipt.ReceiptDate);
+        return (long)await cmd.ExecuteScalarAsync();
+    }
+}
+`,
+    'ReceiptDetailRepository.cs': `
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class ReceiptDetailRepository : IReceiptDetailRepository
+{
+    private readonly SqlConnectionFactory _factory;
+    public ReceiptDetailRepository(SqlConnectionFactory factory) => _factory = factory;
+
+    public async Task<ReceiptDetail?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<ReceiptDetail>> GetAllAsync() { return new List<ReceiptDetail>(); }
+    public async Task AddAsync(ReceiptDetail entity) {}
+    public async Task UpdateAsync(ReceiptDetail entity) {}
+    public async Task DeleteAsync(long id) {}
+    
+    public async Task<long> InsertAndReturnIdAsync(ReceiptDetail entity)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"INSERT INTO ReceiptDetails (receipt_id, item_id, quantity, import_price)
+                           OUTPUT INSERTED.receipt_detail_id VALUES (@RId, @IId, @Qty, @Price)";
+        cmd.Parameters.AddWithValue("@RId", entity.ReceiptId);
+        cmd.Parameters.AddWithValue("@IId", entity.ItemId);
+        cmd.Parameters.AddWithValue("@Qty", entity.Quantity);
+        cmd.Parameters.AddWithValue("@Price", entity.ImportPrice);
+        return (long)await cmd.ExecuteScalarAsync();
+    }
+
+    public async Task<IEnumerable<ReceiptDetail>> GetByReceiptIdAsync(long receiptId) { return new List<ReceiptDetail>(); }
+    public async Task DeleteByReceiptIdAsync(long receiptId) {}
+}
+`,
+    'StaffRepository.cs': `
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class StaffRepository : IStaffRepository
+{
+    private readonly SqlConnectionFactory _factory;
+    public StaffRepository(SqlConnectionFactory factory) => _factory = factory;
+
+    public async Task<Staff?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<Staff>> GetAllAsync() { return new List<Staff>(); }
+    public async Task AddAsync(Staff entity) {}
+    public async Task UpdateAsync(Staff entity) {}
+    public async Task DeleteAsync(long id) {}
+    
+    public async Task<Staff?> GetByEmailAsync(string email)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM Staff WHERE email = @Email";
+        cmd.Parameters.AddWithValue("@Email", email);
+        await using var r = await cmd.ExecuteReaderAsync();
+        if (await r.ReadAsync()) {
+            return new Staff {
+                StaffId = r.GetInt64(r.GetOrdinal("staff_id")),
+                FullName = r.GetString(r.GetOrdinal("full_name")),
+                Email = r.GetString(r.GetOrdinal("email")),
+                Password = r.GetString(r.GetOrdinal("password")),
+                Role = r.GetString(r.GetOrdinal("role")),
+                IsActive = r.GetBoolean(r.GetOrdinal("is_active"))
+            };
+        }
+        return null;
+    }
+    
+    public async Task<long> InsertAndReturnIdAsync(Staff entity) => 1;
+}
+`,
+    'CustomerRepository.cs': `
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public class CustomerRepository : ICustomerRepository
+{
+    private readonly SqlConnectionFactory _factory;
+    public CustomerRepository(SqlConnectionFactory factory) => _factory = factory;
+
+    public async Task<Customer?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<Customer>> GetAllAsync() { return new List<Customer>(); }
+    public async Task AddAsync(Customer entity) {}
+    public async Task UpdateAsync(Customer entity) {}
+    public async Task DeleteAsync(long id) {}
+    
+    public async Task<Customer?> GetByPhoneAsync(string phone)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM Customers WHERE phone = @Phone";
+        cmd.Parameters.AddWithValue("@Phone", phone);
+        await using var r = await cmd.ExecuteReaderAsync();
+        if (await r.ReadAsync()) {
+            return new Customer {
+                CustomerId = r.GetInt64(r.GetOrdinal("customer_id")),
+                FullName = r.GetString(r.GetOrdinal("full_name")),
+                Phone = r.GetString(r.GetOrdinal("phone")),
+                Password = r.GetString(r.GetOrdinal("password"))
+            };
+        }
+        return null;
+    }
+    
+    public async Task UpdateLoyaltyPointsAsync(long customerId, int points) {}
+    public async Task<long> InsertAndReturnIdAsync(Customer entity)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"INSERT INTO Customers (phone, full_name, email, password, membership_level, loyalty_points, created_at)
+                           OUTPUT INSERTED.customer_id VALUES (@Phone, @Name, @Email, @Pass, 'NORMAL', 0, GETUTCDATE())";
+        cmd.Parameters.AddWithValue("@Phone", entity.Phone);
+        cmd.Parameters.AddWithValue("@Name", entity.FullName);
+        cmd.Parameters.AddWithValue("@Email", (object?)entity.Email ?? System.DBNull.Value);
+        cmd.Parameters.AddWithValue("@Pass", entity.Password);
+        return (long)await cmd.ExecuteScalarAsync();
+    }
+}
+`
+};
+
+for (const [file, code] of Object.entries(repos)) {
+    fs.writeFileSync(path.join(dir, file), code.trim());
+}
+
+``n
+
+## File: backend\Program.cs
 `$language
 using System.Text;
 using backend.Application;
@@ -822,6 +3695,57 @@ public class FileStorageService : IFileStorageService
         throw new NotImplementedException("File storage is scaffolded but not wired yet.");
     }
 }
+
+``n
+
+## File: flutter\web\index.html
+`$language
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A new Flutter project.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="restaurant_mobile">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>restaurant_mobile</title>
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
 
 ``n
 
@@ -3033,6 +5957,42 @@ const count = ref(0)
 
 ``n
 
+## File: frontend\src\components\features\ReviewForm.vue
+`$language
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import type { Invoice } from '@/domain/entities/invoice.entity'
+import { canReview }    from '@/domain/rules/invoice.rules'
+import { useReview }    from '@/composables/useReview'
+
+const props  = defineProps<{ invoice: Invoice }>()
+const review = useReview()
+
+// Domain rule gates the entire form \u{2014} not a UI-level hack
+const reviewAllowed = computed(() => canReview(props.invoice))
+const stars   = ref(5)
+const content = ref('')
+
+async function submit() {
+  if (!reviewAllowed.value) return       // double guard
+  await review.create(props.invoice.invoiceId, stars.value, content.value)
+}
+</script>
+
+<template>
+  <section class="review-section">
+    <!-- Show locked message until invoice is PAID -->
+    <div v-if="!reviewAllowed" class="review-locked">
+      Review becomes available after payment is completed.
+    </div>
+    <form v-else @submit.prevent="submit">
+      <!-- star picker + textarea -->
+      <button type="submit">Submit Review</button>
+    </form>
+  </section>
+</template>
+``n
+
 ## File: frontend\src\layouts\ClientLayout.vue
 `$language
 <script setup lang="ts">
@@ -3684,12 +6644,13 @@ import { useI18n } from 'vue-i18n'
 import { Form, Field, ErrorMessage } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
-import { useClientAuthStore } from '../../stores/clientAuth'
-import { toast } from '../../services/toast'
+import { useAuthStore } from '../../stores/auth.store'
+import { useNotificationStore } from '../../stores/notification.store'
 
 const router = useRouter()
 const { t } = useI18n()
-const auth = useClientAuthStore()
+const auth = useAuthStore()
+const notify = useNotificationStore()
 const mode = ref('signin')
 const showPassword = ref(false)
 const redirectAfterLogin = window.history.state?.redirectAfterLogin || '/'
@@ -3719,27 +6680,29 @@ const registerSchema = computed(() =>
   )
 )
 
-const submitSignIn = async (values, { resetForm }) => {
+const submitSignIn = async (values: any) => {
   try {
-    const customer = await auth.signIn(values)
-    toast.success(t('auth.welcomeBackMessage', { name: customer.full_name }))
+    await auth.loginCustomer(values)
+    notify.success('Welcome back!')
     router.replace(redirectAfterLogin || '/')
-  } catch {
-    toast.error(t('auth.phoneError'))
-  } finally {
-    resetForm()
+  } catch (err: any) {
+    notify.error(err.message ?? 'Login failed.')
   }
 }
 
-const submitRegister = async (values, { resetForm }) => {
+const submitRegister = async (values: any) => {
   try {
-    await auth.register(values)
-    toast.success(t('auth.accountCreatedMessage'))
-    router.replace('/reserve')
-  } catch (error) {
-    toast.error(error.message || t('auth.unableCreateAccount'))
-  } finally {
-    resetForm()
+    await auth.registerCustomer({
+        fullName: values.full_name,
+        phone: values.phone,
+        password: values.password,
+        gender: values.gender,
+        address: values.address
+    })
+    notify.success('Account created!')
+    router.replace('/')
+  } catch (err: any) {
+    notify.error(err.message ?? 'Registration failed.')
   }
 }
 </script>
@@ -4099,127 +7062,52 @@ onMounted(async () => {
 ## File: frontend\src\pages\client\ClientOrderPage.vue
 `$language
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import gsap from 'gsap'
-import { useReservation, useAuth, useCustomer, useMenuItem, useTable, useOrder, useUser, useCategory, useSupplier, usePurchaseOrder, useInventoryItem, useOrderItem, useInvoice, usePayment, useShift, useFb, useDiscounts, useStaff, useManufacturers, useReceipts, useDashboard, useReviews } from '@/composables/useAll'
-import { toast } from '../../services/toast'
-import { useClientAuthStore } from '../../stores/clientAuth'
-import { useReservationStore } from '../../stores/reservation'
+import { useOrder }       from '@/composables/useOrder'
+import { useMenu }        from '@/composables/useMenu'
+import { useReservation } from '@/composables/useReservation'
+import { canCreateOrder } from '@/domain/rules/reservation.rules'
+import { isSellable }     from '@/domain/rules/fb.rules'
+import { useNotificationStore } from '@/stores/notification.store'
+import type { FB } from '@/domain/entities/fb.entity'
 
 const props = defineProps({ tableId: { type: String, required: true } })
-const route = useRoute()
-const router = useRouter()
-const auth = useClientAuthStore()
-const reservationStore = useReservationStore()
-const order = ref(null)
-const confirmOpen = ref(false)
-const reservation = ref(null)
-const menuItems = ref([])
-const searchQuery = ref('')
+const route   = useRoute()
+const router  = useRouter()
+const notify  = useNotificationStore()
 
-const subtotal = computed(() => order.value?.subtotal || 0)
-const total = computed(() => subtotal.value)
-const filteredMenuItems = computed(() => {
-  const query = searchQuery.value.trim().toLowerCase()
-  if (!query) return menuItems.value
-  return menuItems.value.filter((item) => item.name.toLowerCase().includes(query))
-})
+const menu        = useMenu()
+const reservation = useReservation()
+const order       = useOrder()
 
-const loadMenu = async () => {
-  menuItems.value = await useFb().list({ type: 'All' })
-}
-
-const loadReservation = async () => {
-  const reservationId = route.query.reservationId || reservationStore.activeReservation
-  if (!reservationId) {
-    toast.error('Please select a valid reservation first.')
-    router.push('/my-reservations')
-    return null
-  }
-
-  const currentReservation = await useReservation().get(reservationId)
-  if (!currentReservation || currentReservation.status !== 'SERVING') {
-    toast.error('Orders can only be placed for active SERVING sessions.')
-    router.push('/my-reservations')
-    return null
-  }
-
-  reservation.value = currentReservation
-  return currentReservation
-}
-
-const ensureOrder = async () => {
-  const currentReservation = await loadReservation()
-  if (!currentReservation) return null
-
-  if (order.value) return order.value
-
-  const list = await useOrder().list()
-  order.value = list.find((entry) => String(entry.table_id) === String(props.tableId))
-  if (!order.value) {
-    order.value = await useOrder().create({
-      table_id: Number(props.tableId),
-      reservation_id: currentReservation.reservation_id,
-      notes: 'Client order'
-    })
-  }
-  return order.value
-}
-
-const load = async () => {
-  const currentReservation = await loadReservation()
-  if (!currentReservation) return
-
-  const list = await useOrder().list()
-  order.value = list.find((entry) => String(entry.table_id) === String(props.tableId))
-  if (!order.value) {
-    order.value = await useOrder().create({
-      table_id: Number(props.tableId),
-      reservation_id: currentReservation.reservation_id,
-      notes: 'Client order'
-    })
-  }
-}
-
-const requestInvoice = async () => {
-  confirmOpen.value = true
-}
-
-const callWaiter = () => {
-  toast.info('A waiter has been notified')
-}
-
-const confirmInvoice = async () => {
-  try {
-    const invoice = await useInvoice().create({ order_id: order.value.order_id })
-    toast.success('Invoice created.')
-    router.push(`/invoice/${invoice.invoice_id}`)
-  } catch (error) {
-    toast.error(error.message || 'Unable to create invoice.')
-  }
-}
-
-const removeItem = async (row) => {
-  await useOrderItem().remove(row.order_item_id)
-  await load()
-}
-
-const addToOrder = async (item) => {
-  try {
-    const currentOrder = await ensureOrder()
-    if (!currentOrder) return
-    await useOrderItem().add(currentOrder.order_id, { item_id: item.item_id, quantity: 1, notes: '' })
-    toast.success('Added to order.')
-    await load()
-  } catch (error) {
-    toast.error(error.message || 'Unable to add item.')
-  }
-}
+const sellableItems = computed(() => menu.items.value.filter(isSellable))
+const subtotal = order.itemsTotal
 
 onMounted(async () => {
-  await Promise.all([loadMenu(), load()])
+  const reservationId = Number(route.query.reservationId)
+  if (!reservationId) {
+    notify.error('Please select a valid reservation first.')
+    router.push('/my-reservations')
+    return
+  }
+
+  await reservation.loadById(reservationId)
+  const res = reservation.current.value
+
+  if (!res || !canCreateOrder(res)) {
+    notify.error('Orders can only be placed for CONFIRMED reservations.')
+    router.push('/my-reservations')
+    return
+  }
+
+  await menu.loadMenu()
+  await order.create({ tableId: res.tableId, reservationId: res.reservationId })
 })
+
+async function addItem(fb: FB, qty: number) {
+  await order.addItem(fb, qty)
+}
 </script>
 
 <template>
@@ -5036,157 +7924,118 @@ onMounted(load)
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useReservation, useAuth, useCustomer, useMenuItem, useTable, useOrder, useUser, useCategory, useSupplier, usePurchaseOrder, useInventoryItem, useOrderItem, useInvoice, usePayment, useShift, useFb, useDiscounts, useStaff, useManufacturers, useReceipts, useDashboard, useReviews } from '@/composables/useAll'
-import { toast } from '../../services/toast'
-// Mock data removed
+import { tableService }        from '@/services/table.service'
+import { orderService }        from '@/services/order.service'
+import { menuService }         from '@/services/menu.service'
+import { reservationService }  from '@/services/reservation.service'
+import { invoiceService }      from '@/services/invoice.service'
+import { warehouseService }    from '@/services/warehouse.service'
+import { receiptService }      from '@/services/receipt.service'
+import { discountService }     from '@/services/discount.service'
+import { customerService }     from '@/services/customer.service'
+import { staffService }        from '@/services/staff.service'
+import { reviewService }       from '@/services/review.service'
+import { categoryService }     from '@/services/category.service'
+import { manufacturerService } from '@/services/manufacturer.service'
+import { useNotificationStore } from '@/stores/notification.store'
 
-const route = useRoute()
+const route  = useRoute()
 const router = useRouter()
-const query = ref('')
-const rows = ref([])
-const fbRows = ref([])
+const notify = useNotificationStore()
+const rows   = ref<any[]>([])
+const query  = ref('')
 
-const pageKey = computed(() => route.meta.pageKey)
-const config = computed(() => ({})[pageKey.value] || { columns: [], source: '' })
-const meta = computed(() => ({})[pageKey.value] || { title: 'Workspace', description: '' })
+const pageKey = computed(() => route.meta.pageKey as string)
+
+// Map pageKey -> service call
+const loadMap: Record<string, () => Promise<any[]>> = {
+  'staff-tables':           () => tableService.getAll(),
+  'staff-orders':           () => orderService.getAll(),
+  'staff-menu':             () => menuService.getFBMenu(true),
+  'staff-reservations':     () => reservationService.getAll(),
+  'staff-invoices':         () => invoiceService.getAll(),
+  'staff-warehouse':        () => warehouseService.getReport(),
+  'staff-receipts':         () => receiptService.getAll(),
+  'staff-discounts':        () => discountService.getAll(),
+  'staff-customers':        () => customerService.getAll(),
+  'staff-staff-management': () => staffService.getAll(),
+  'staff-reviews':          () => reviewService.getAll(),
+  'staff-categories':       () => categoryService.getAll(),
+  'staff-manufacturers':    () => manufacturerService.getAll(),
+}
 
 const load = async () => {
-  const source = config.value.source
-  if (!source) return
-  rows.value = await api[source].list()
-  fbRows.value = await useFb().list()
+  const loader = loadMap[pageKey.value]
+  if (!loader) return
+  try { rows.value = await loader() }
+  catch (err: any) { notify.error(err.message ?? 'Failed to load data') }
+}
+
+// Map pageKey -> action call
+const runAction = async (row: any) => {
+  try {
+    switch (pageKey.value) {
+      case 'staff-orders':       return router.push('/staff/orders/' + row.orderId)
+      case 'staff-invoices':     return router.push('/staff/invoices/' + row.invoiceId)
+      case 'staff-tables':
+        await tableService.updateStatus(row.tableId,
+          row.status === 'AVAILABLE' ? 'OCCUPIED' : 'AVAILABLE')
+        break
+      case 'staff-discounts':
+        await discountService.toggle(row.discountCodeId)
+        break
+      case 'staff-staff-management':
+        await staffService.toggle(row.staffId)
+        break
+      case 'staff-categories':
+        await categoryService.delete(row.categoryId)
+        break
+      case 'staff-reservations':
+        if (row.status === 'PENDING')    await reservationService.confirm(row.reservationId)
+        else if (row.status === 'CONFIRMED') await reservationService.complete(row.reservationId)
+        break
+      default:
+        notify.info('Action not implemented for this workspace.')
+        return
+    }
+    notify.success('Action successful')
+    await load()
+  } catch (err: any) {
+    notify.error(err.message ?? 'Action failed')
+  }
 }
 
 const filteredRows = computed(() => {
   const q = query.value.trim().toLowerCase()
-  return q ? rows.value.filter((row) => JSON.stringify(row).toLowerCase().includes(q)) : rows.value
+  return q ? rows.value.filter(r => JSON.stringify(r).toLowerCase().includes(q)) : rows.value
 })
-
-const displayRows = computed(() =>
-  filteredRows.value.map((row) => ({
-    raw: row,
-    cells: formatRow(row)
-  }))
-)
-
-const formatRow = (row) => {
-  switch (pageKey.value) {
-    case 'staff-tables':
-      return [row.table_number, row.capacity, row.location, row.status]
-    case 'staff-orders':
-      return [row.order_id, row.table_id, row.status, row.subtotal?.toLocaleString?.() || row.subtotal]
-    case 'staff-menu':
-      return [row.image_url ? 'Image' : 'â€”', row.name, row.category_id, row.item_type, row.price?.toLocaleString?.() || row.price, row.stock_status, row.show_on_menu ? 'Visible' : 'Hidden']
-    case 'staff-reservations':
-      return [row.reservation_id, row.customer_name, row.phone, row.table_id, row.reserved_at.slice(0, 10), row.guest_count, row.status]
-    case 'staff-invoices':
-      return [row.invoice_code, row.order_id, row.table_id, row.subtotal, row.discount_amount, row.total_amount, row.status, row.payment_method]
-    case 'staff-warehouse':
-      return [row.name, row.item_type, row.current_stock, row.current_stock <= 5 ? 'LOW_STOCK' : 'NORMAL', row.last_updated || '-']
-    case 'staff-receipts':
-      return [row.receipt_id, row.manufacturer_id, row.receipt_date, row.total_amount, row.created_by]
-    case 'staff-discounts':
-      return [row.code, row.discount_type, row.discount_value, row.min_order_amount, row.max_discount_amount || '-', `${row.used_count}/${row.usage_limit}`, row.is_active ? 'Yes' : 'No']
-    case 'staff-customers':
-      return [row.customer_id, row.full_name, row.phone, row.gender, row.address, row.membership_level, row.loyalty_points]
-    case 'staff-staff-management':
-      return [row.full_name, row.email, row.phone, row.role, row.department, row.hire_date, row.is_active ? 'Yes' : 'No']
-    case 'staff-reviews':
-      return [row.invoice_id, row.customer_id, `${row.rating}â˜…`, row.content.slice(0, 80), row.date.slice(0, 10), row.replied ? 'Yes' : 'No']
-    case 'staff-categories':
-      return [row.name, row.type, row.min_price, row.max_price, fbRows.value.filter((item) => item.category_id === row.category_id).length]
-    case 'staff-manufacturers':
-      return [row.name, row.address, row.phone, row.is_inhouse ? 'Yes' : 'No', fbRows.value.filter((item) => item.manufacturer_id === row.manufacturer_id).length]
-    default:
-      return []
-  }
-}
-
-const actionLabel = (row) => {
-  if (pageKey.value === 'staff-orders') return 'View'
-  if (pageKey.value === 'staff-invoices') return 'View'
-  if (pageKey.value === 'staff-receipts') return 'View'
-  if (pageKey.value === 'staff-tables') return row.status === 'AVAILABLE' ? 'Occupy' : 'Release'
-  if (pageKey.value === 'staff-discounts') return row.is_active ? 'Deactivate' : 'Activate'
-  if (pageKey.value === 'staff-staff-management') return 'Deactivate'
-  if (pageKey.value === 'staff-categories') return 'Delete'
-  if (pageKey.value === 'staff-manufacturers') return 'Delete'
-  if (pageKey.value === 'staff-reservations') return row.status === 'CONFIRMED' ? 'Start Serving' : (row.status === 'SERVING' ? 'Complete' : 'â€”')
-  return 'Action'
-}
-
-const runAction = async (row) => {
-  try {
-    switch (pageKey.value) {
-      case 'staff-orders':
-        return router.push(`/staff/orders/${row.order_id}`)
-      case 'staff-invoices':
-        return router.push(`/staff/invoices/${row.invoice_id}`)
-      case 'staff-receipts':
-        return toast.info(`Receipt #${row.receipt_id}`)
-      case 'staff-tables':
-        await useTable().setStatus(row.table_id, row.status === 'AVAILABLE' ? 'OCCUPIED' : 'AVAILABLE')
-        break
-      case 'staff-discounts':
-        await useDiscounts().update(row.discount_code_id, { is_active: !row.is_active })
-        break
-      case 'staff-staff-management':
-        await useStaff().deactivate(row.staff_id)
-        break
-      case 'staff-categories':
-        await useCategory().delete(row.category_id)
-        break
-      case 'staff-manufacturers':
-        await useManufacturers().delete(row.manufacturer_id)
-        break
-      case 'staff-reservations':
-        if (row.status === 'CONFIRMED') await useReservation().setStatus(row.reservation_id, 'SERVING')
-        else if (row.status === 'SERVING') await useReservation().setStatus(row.reservation_id, 'COMPLETED')
-        break
-      default:
-        toast.info('Action not implemented yet.')
-    }
-    toast.success('Action successful')
-    await load()
-  } catch (error) {
-    toast.error(error.message || 'Something went wrong. Please try again.')
-  }
-}
 
 onMounted(load)
 watch(pageKey, load)
 </script>
-
 <template>
-  <main class="staff-page">
-    <section class="workspace-head">
-      <div>
-        <p class="eyebrow">{{ meta.title }}</p>
-        <h2>{{ meta.description }}</h2>
-      </div>
-      <input v-model="query" class="workspace-search" placeholder="Search..." />
-    </section>
-
-    <section class="staff-panel">
-      <table>
-        <thead>
-          <tr>
-            <th v-for="column in config.columns" :key="column">{{ column }}</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in displayRows" :key="row.raw.category_id || row.raw.manufacturer_id || row.raw.table_id || row.raw.order_id || row.raw.reservation_id || row.raw.invoice_id || row.raw.receipt_id || row.raw.staff_id || row.raw.review_id || row.raw.customer_id || row.raw.discount_code_id">
-            <td v-for="(cell, index) in row.cells" :key="index">{{ cell }}</td>
-            <td><button class="ghost-button" @click="runAction(row.raw)">{{ actionLabel(row.raw) }}</button></td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-  </main>
+  <div class="staff-workspace">
+    <h2>Workspace</h2>
+    <div v-for="row in filteredRows" :key="row.id">
+      <pre>{{ row }}</pre>
+      <button @click="runAction(row)">Action</button>
+    </div>
+  </div>
 </template>
+``n
 
+## File: hashgen\Program.cs
+`$language
+using System;
+using BCrypt.Net;
 
+class Program
+{
+    static void Main()
+    {
+        Console.WriteLine(BCrypt.Net.BCrypt.HashPassword("password123"));
+    }
+}
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.API\Program.cs
@@ -5194,7 +8043,15 @@ watch(pageKey, load)
 using RestaurantMS.Application;
 using RestaurantMS.Infrastructure;
 using RestaurantMS.API.Middleware;
+using RestaurantMS.API.Extensions;
 using Serilog;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -5204,21 +8061,48 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 builder.Host.UseSerilog();
 
-// Add services to the container.
+// DB Migration Runner
+builder.Configuration.RunDbMigrations();
+
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddCors(opt => opt.AddPolicy("VueApp", 
+builder.Services.AddCors(opt => opt.AddPolicy("AllowFrontend", 
     p => p.WithOrigins("http://localhost:5173").AllowAnyMethod().AllowAnyHeader()));
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    var key = builder.Configuration["Jwt:Key"] ?? "ThisIsASecretKeyForJWTSigningDoNotUseInProduction";
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "RestaurantSystem",
+        ValidAudience = builder.Configuration["Jwt:Audience"] ?? "RestaurantFrontend",
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key))
+    };
+});
+
+builder.Services.AddAuthorization(opts =>
+{
+    opts.AddPolicy("ManagerOnly",   p => p.RequireRole("MANAGER"));
+    opts.AddPolicy("StaffOnly",     p => p.RequireRole("MANAGER", "ADMIN"));
+    opts.AddPolicy("CustomerOnly",  p => p.RequireRole("CUSTOMER"));
+});
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
@@ -5227,12 +8111,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors("VueApp");
-
-// Authentication & Authorization
 app.UseAuthentication();
 app.UseAuthorization();
-
+app.UseCors("AllowFrontend");
 app.MapControllers();
 
 app.Run();
@@ -5255,6 +8136,37 @@ public class ApiResponse<T>
     }
 }
 
+
+``n
+
+## File: RestaurantMS\src\RestaurantMS.API\Controllers\AuthController.cs
+`$language
+using Microsoft.AspNetCore.Mvc;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Features.Auth.Commands.LoginStaff;
+using RestaurantMS.Application.Features.Auth.Commands.RegisterCustomer;
+
+namespace RestaurantMS.API.Controllers;
+
+[Route("api/auth")]
+[ApiController]
+public class AuthController : ControllerBase
+{
+    private readonly IMediator _m;
+    public AuthController(IMediator m) => _m = m;
+
+    [HttpPost("staff/login")]
+    public async Task<IActionResult> StaffLogin([FromBody] LoginStaffCommand cmd, CancellationToken ct) => Ok(await _m.Send(cmd, ct));
+
+    [HttpPost("customer/register")]
+    public async Task<IActionResult> CustomerRegister([FromBody] RegisterCustomerCommand cmd, CancellationToken ct) => Ok(await _m.Send(cmd, ct));
+
+    [HttpPost("customer/login")]
+    public async Task<IActionResult> CustomerLogin([FromBody] object cmd, CancellationToken ct) => Ok(new { Token = "mock-customer-token" });
+}
 
 ``n
 
@@ -5282,64 +8194,50 @@ public abstract class BaseApiController : ControllerBase
 ## File: RestaurantMS\src\RestaurantMS.API\Controllers\CategoryController.cs
 `$language
 using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Features.Category.Queries;
 
 namespace RestaurantMS.API.Controllers;
 
+[Route("api/categories")]
 [ApiController]
-[Route("api/[controller]")]
+[Authorize(Policy = "ManagerOnly")]
 public class CategoryController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    public CategoryController(IMediator mediator) { _mediator = mediator; }
+    private readonly IMediator _m;
+    public CategoryController(IMediator m) => _m = m;
 
     [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
+    [AllowAnonymous]
+    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _m.Send(new GetAllCategoriesQuery(), ct)); // Mock list
 }
-
 
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.API\Controllers\CustomerController.cs
 `$language
 using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Features.Customer.Queries;
 
 namespace RestaurantMS.API.Controllers;
 
+[Route("api/customers")]
 [ApiController]
-[Route("api/[controller]")]
+[Authorize(Policy = "StaffOnly")]
 public class CustomerController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    public CustomerController(IMediator mediator) { _mediator = mediator; }
+    private readonly IMediator _m;
+    public CustomerController(IMediator m) => _m = m;
 
     [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
-}
-
-
-``n
-
-## File: RestaurantMS\src\RestaurantMS.API\Controllers\CustomersController.cs
-`$language
-using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Models;
-using RestaurantMS.Application.Features.Auth.Commands.RegisterCustomer;
-
-namespace RestaurantMS.API.Controllers;
-
-public class CustomersController : BaseApiController
-{
-    [HttpPost("register")]
-    public async Task<ActionResult<ApiResponse<CustomerAuthDto>>> Register(RegisterCustomerCommand command)
-    {
-        return OkResponse(await Mediator.Send(command));
-    }
+    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(new List<object>());
 }
 
 ``n
@@ -5347,358 +8245,467 @@ public class CustomersController : BaseApiController
 ## File: RestaurantMS\src\RestaurantMS.API\Controllers\DiscountCodeController.cs
 `$language
 using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Features.DiscountCode.Commands;
+using RestaurantMS.Application.Features.DiscountCode.Queries;
 
 namespace RestaurantMS.API.Controllers;
 
+[Route("api/discount-codes")]
 [ApiController]
-[Route("api/[controller]")]
 public class DiscountCodeController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    public DiscountCodeController(IMediator mediator) { _mediator = mediator; }
+    private readonly IMediator _m;
+    public DiscountCodeController(IMediator m) => _m = m;
+
+    [HttpPost]
+    [Authorize(Policy = "ManagerOnly")]
+    public async Task<IActionResult> Create([FromBody] CreateDiscountCodeCommand cmd, CancellationToken ct)
+        => Ok(await _m.Send(cmd, ct));
+
+    [HttpPut("{id}/toggle")]
+    [Authorize(Policy = "ManagerOnly")]
+    public async Task<IActionResult> Toggle(long id, CancellationToken ct)
+        => Ok(await _m.Send(new ToggleDiscountCodeCommand(id), ct));
+
+    [HttpGet("validate/{code}")]
+    [Authorize(Policy = "StaffOnly")]
+    public async Task<IActionResult> Validate(string code, CancellationToken ct)
+        => Ok(await _m.Send(new ValidateDiscountCodeQuery(code), ct));
 
     [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
+    [Authorize(Policy = "StaffOnly")]
+    public async Task<IActionResult> GetAll(CancellationToken ct)
+        => Ok(await _m.Send(new GetDiscountCodesQuery(), ct));
 }
-
 
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.API\Controllers\FBController.cs
 `$language
 using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RestaurantMS.API.Controllers;
 
+[Route("api/fb")]
 [ApiController]
-[Route("api/[controller]")]
+[Authorize(Policy = "ManagerOnly")]
 public class FBController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    public FBController(IMediator mediator) { _mediator = mediator; }
+    private readonly IMediator _m;
+    public FBController(IMediator m) => _m = m;
 
     [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
+    [AllowAnonymous]
+    public async Task<IActionResult> GetMenu(CancellationToken ct) => Ok(new List<object>()); // Mock list
 }
-
 
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.API\Controllers\InvoiceController.cs
 `$language
 using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Features.Invoice.Commands.CreateInvoice;
+using RestaurantMS.Application.Features.Invoice.Commands.ApplyDiscount;
+using RestaurantMS.Application.Features.Invoice.Commands;
+using RestaurantMS.Application.Features.Invoice.Queries;
 
 namespace RestaurantMS.API.Controllers;
 
+[Route("api/invoices")]
 [ApiController]
-[Route("api/[controller]")]
+[Authorize(Policy = "StaffOnly")]
 public class InvoiceController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    public InvoiceController(IMediator mediator) { _mediator = mediator; }
+    private readonly IMediator _m;
+    public InvoiceController(IMediator m) => _m = m;
+
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateInvoiceCommand cmd, CancellationToken ct) 
+        => Ok(await _m.Send(cmd, ct));
+
+    [HttpPost("{id}/apply-discount")]
+    public async Task<IActionResult> ApplyDiscount(long id, [FromBody] ApplyDiscountRequest req, CancellationToken ct)
+        => Ok(await _m.Send(new ApplyDiscountCommand(id, req.DiscountCode), ct));
+
+    [HttpPost("{id}/pay")]
+    public async Task<IActionResult> Pay(long id, [FromBody] PayInvoiceRequest req, CancellationToken ct)
+        => Ok(await _m.Send(new PayInvoiceCommand(id, req.Method, req.CashierId), ct));
+
+    [HttpGet("{id}")]
+    [Authorize]
+    public async Task<IActionResult> GetById(long id, CancellationToken ct)
+        => Ok(await _m.Send(new GetInvoiceQuery(id), ct));
 
     [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
+    public async Task<IActionResult> GetAll(CancellationToken ct)
+        => Ok(await _m.Send(new GetAllInvoicesQuery(), ct));
+
+    public class ApplyDiscountRequest { public string DiscountCode { get; set; } = string.Empty; }
+    public class PayInvoiceRequest { public string Method { get; set; } = string.Empty; public long CashierId { get; set; } }
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.API\Controllers\ManufacturerController.cs
 `$language
 using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Features.Manufacturer.Queries;
 
 namespace RestaurantMS.API.Controllers;
 
+[Route("api/manufacturers")]
 [ApiController]
-[Route("api/[controller]")]
+[Authorize(Policy = "StaffOnly")]
 public class ManufacturerController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    public ManufacturerController(IMediator mediator) { _mediator = mediator; }
+    private readonly IMediator _m;
+    public ManufacturerController(IMediator m) => _m = m;
 
     [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
+    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _m.Send(new GetManufacturersQuery(), ct)); // Mock list
 }
-
-
-``n
-
-## File: RestaurantMS\src\RestaurantMS.API\Controllers\OrderItemController.cs
-`$language
-using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
-using MediatR;
-
-namespace RestaurantMS.API.Controllers;
-
-[ApiController]
-[Route("api/[controller]")]
-public class OrderItemController : ControllerBase
-{
-    private readonly IMediator _mediator;
-    public OrderItemController(IMediator mediator) { _mediator = mediator; }
-
-    [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
-}
-
 
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.API\Controllers\ReceiptController.cs
 `$language
 using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Features.Receipt.Queries;
+using RestaurantMS.Application.Features.Receipt.Commands.CreateReceipt;
 
 namespace RestaurantMS.API.Controllers;
 
+[Route("api/receipts")]
 [ApiController]
-[Route("api/[controller]")]
+[Authorize(Policy = "ManagerOnly")]
 public class ReceiptController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    public ReceiptController(IMediator mediator) { _mediator = mediator; }
+
+    private readonly IMediator _m;
+    public ReceiptController(IMediator m) => _m = m;
+
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateReceiptCommand cmd, CancellationToken ct) 
+        => Ok(await _m.Send(cmd, ct));
 
     [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
+    [Authorize(Policy = "StaffOnly")]
+    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _m.Send(new GetAllReceiptsQuery(), ct));
 }
-
-
-``n
-
-## File: RestaurantMS\src\RestaurantMS.API\Controllers\ReceiptDetailController.cs
-`$language
-using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
-using MediatR;
-
-namespace RestaurantMS.API.Controllers;
-
-[ApiController]
-[Route("api/[controller]")]
-public class ReceiptDetailController : ControllerBase
-{
-    private readonly IMediator _mediator;
-    public ReceiptDetailController(IMediator mediator) { _mediator = mediator; }
-
-    [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
-}
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.API\Controllers\RestaurantOrderController.cs
 `$language
 using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Features.Order.Commands.AddOrderItem;
+using RestaurantMS.Application.Features.Order.Commands.CancelOrder;
+using RestaurantMS.Application.Features.Order.Commands;
+using RestaurantMS.Application.Features.Order.Queries;
 
 namespace RestaurantMS.API.Controllers;
 
+[Route("api/orders")]
 [ApiController]
-[Route("api/[controller]")]
+[Authorize(Policy = "StaffOnly")]
 public class RestaurantOrderController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    public RestaurantOrderController(IMediator mediator) { _mediator = mediator; }
+    private readonly IMediator _m;
+    public RestaurantOrderController(IMediator m) => _m = m;
+
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateOrderCommand cmd, CancellationToken ct)
+        => Ok(await _m.Send(cmd, ct));
+
+    [HttpPost("{orderId}/items")]
+    public async Task<IActionResult> AddItem(long orderId, [FromBody] AddOrderItemDto req, CancellationToken ct) 
+        => Ok(await _m.Send(new AddOrderItemCommand(orderId, req.FBId, req.Quantity), ct));
+
+    [HttpDelete("{orderId}")]
+    public async Task<IActionResult> Cancel(long orderId, CancellationToken ct) 
+        => Ok(await _m.Send(new CancelOrderCommand(orderId), ct));
+
+    [HttpPut("{orderId}/start-serving")]
+    public async Task<IActionResult> StartServing(long orderId, CancellationToken ct)
+    {
+        await _m.Send(new StartServingCommand(orderId), ct);
+        return NoContent();
+    }
+
+    [HttpPut("{orderId}/complete")]
+    public async Task<IActionResult> Complete(long orderId, CancellationToken ct)
+    {
+        await _m.Send(new CompleteOrderCommand(orderId), ct);
+        return NoContent();
+    }
+
+    [HttpGet("{orderId}")]
+    public async Task<IActionResult> Get(long orderId, CancellationToken ct)
+        => Ok(await _m.Send(new GetOrderQuery(orderId), ct));
 
     [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
+    public async Task<IActionResult> GetAll(CancellationToken ct)
+        => Ok(await _m.Send(new GetAllOrdersQuery(), ct));
+
+    public class AddOrderItemDto { public long FBId { get; set; } public int Quantity { get; set; } }
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.API\Controllers\RestaurantTableController.cs
 `$language
 using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RestaurantMS.API.Controllers;
 
+[Route("api/tables")]
 [ApiController]
-[Route("api/[controller]")]
+[Authorize(Policy = "StaffOnly")]
 public class RestaurantTableController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    public RestaurantTableController(IMediator mediator) { _mediator = mediator; }
+    private readonly IMediator _m;
+    public RestaurantTableController(IMediator m) => _m = m;
 
     [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
+    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(new List<object>()); // Mock list
 }
-
 
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.API\Controllers\ReviewController.cs
 `$language
 using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Features.Review.Queries;
+using RestaurantMS.Application.Features.Review.Commands.CreateReview;
 
 namespace RestaurantMS.API.Controllers;
 
+[Route("api/reviews")]
 [ApiController]
-[Route("api/[controller]")]
+[Authorize(Policy = "CustomerOnly")]
 public class ReviewController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    public ReviewController(IMediator mediator) { _mediator = mediator; }
+
+    private readonly IMediator _m;
+    public ReviewController(IMediator m) => _m = m;
+
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateReviewCommand cmd, CancellationToken ct) 
+        => Ok(await _m.Send(cmd, ct));
 
     [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
+    [Authorize(Policy = "StaffOnly")]
+    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _m.Send(new GetAllReviewsQuery(), ct));
 }
-
-
-``n
-
-## File: RestaurantMS\src\RestaurantMS.API\Controllers\ReviewReplyController.cs
-`$language
-using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
-using MediatR;
-
-namespace RestaurantMS.API.Controllers;
-
-[ApiController]
-[Route("api/[controller]")]
-public class ReviewReplyController : ControllerBase
-{
-    private readonly IMediator _mediator;
-    public ReviewReplyController(IMediator mediator) { _mediator = mediator; }
-
-    [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
-}
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.API\Controllers\StaffController.cs
 `$language
 using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Features.Staff.Queries;
 
 namespace RestaurantMS.API.Controllers;
 
+[Route("api/staff")]
 [ApiController]
-[Route("api/[controller]")]
+[Authorize(Policy = "ManagerOnly")]
 public class StaffController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    public StaffController(IMediator mediator) { _mediator = mediator; }
+    private readonly IMediator _m;
+    public StaffController(IMediator m) => _m = m;
 
     [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
+    public async Task<IActionResult> GetAll(CancellationToken ct) 
+        => Ok(await _m.Send(new GetStaffQuery(), ct));
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.API\Controllers\TableReservationController.cs
 `$language
 using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Features.Reservation.Queries;
 
 namespace RestaurantMS.API.Controllers;
 
+[Route("api/reservations")]
 [ApiController]
-[Route("api/[controller]")]
+[Authorize(Policy = "CustomerOnly")]
 public class TableReservationController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    public TableReservationController(IMediator mediator) { _mediator = mediator; }
+    private readonly IMediator _m;
+    public TableReservationController(IMediator m) => _m = m;
 
-    [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateReservationDto cmd, CancellationToken ct) => Ok(new { ReservationId = 1 });
+
+    [HttpGet("all")]
+    [Authorize(Policy = "StaffOnly")]
+    public async Task<IActionResult> GetAll(CancellationToken ct)
+        => Ok(await _m.Send(new GetAllReservationsQuery(), ct));
+
+    public class CreateReservationDto { public int TableId { get; set; } public DateTime ReservedAt { get; set; } public int GuestCount { get; set; } }
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.API\Controllers\WarehouseController.cs
 `$language
 using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RestaurantMS.API.Controllers;
 
+[Route("api/warehouse")]
 [ApiController]
-[Route("api/[controller]")]
+[Authorize(Policy = "StaffOnly")]
 public class WarehouseController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    public WarehouseController(IMediator mediator) { _mediator = mediator; }
+    private readonly IMediator _m;
+    public WarehouseController(IMediator m) => _m = m;
 
-    [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
+    [HttpGet("report")]
+    public async Task<IActionResult> GetReport(CancellationToken ct) => Ok(new List<object>()); // Mock list
 }
 
+``n
+
+## File: RestaurantMS\src\RestaurantMS.API\Extensions\DbUpExtensions.cs
+`$language
+using System;
+using System.Reflection;
+using DbUp;
+using Microsoft.Extensions.Configuration;
+using Serilog;
+
+namespace RestaurantMS.API.Extensions;
+
+public static class DbUpExtensions
+{
+    public static void RunDbMigrations(this IConfiguration configuration)
+    {
+        var connectionString = configuration.GetConnectionString("DefaultConnection");
+
+        EnsureDatabase.For.SqlDatabase(connectionString);
+
+        var upgrader = DeployChanges.To
+            .SqlDatabase(connectionString)
+            .WithScriptsEmbeddedInAssembly(Assembly.GetExecutingAssembly())
+            .WithVariablesDisabled()
+            .LogToConsole()
+            .Build();
+
+        var result = upgrader.PerformUpgrade();
+
+        if (!result.Successful)
+        {
+            Log.Fatal(result.Error, "Database migration failed");
+            throw new Exception("Database migration failed", result.Error);
+        }
+        
+        Log.Information("Database migration successful!");
+    }
+}
 
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.API\Middleware\ExceptionHandlingMiddleware.cs
 `$language
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Threading.Tasks;
 using RestaurantMS.Domain.Exceptions;
+using RestaurantMS.Application.Common.Exceptions;
 
 namespace RestaurantMS.API.Middleware;
 
 public class ExceptionHandlingMiddleware
 {
     private readonly RequestDelegate _next;
-    public ExceptionHandlingMiddleware(RequestDelegate next) { _next = next; }
-    public async Task InvokeAsync(HttpContext context)
+    private readonly ILogger<ExceptionHandlingMiddleware> _logger;
+
+    public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger)
     {
-        try
+        _next = next;
+        _logger = logger;
+    }
+
+    public async Task InvokeAsync(HttpContext ctx)
+    {
+        try { await _next(ctx); }
+        catch (Exception ex) { await HandleAsync(ctx, ex); }
+    }
+
+    private async Task HandleAsync(HttpContext ctx, Exception ex)
+    {
+        _logger.LogError(ex, "Unhandled: {Message}", ex.Message);
+
+        var (status, code, message) = ex switch
         {
-            await _next(context);
-        }
-        catch (Exception ex)
+            FreshRawCannotBeSoldException e    => (422, "FRESH_RAW_CANNOT_BE_SOLD",          e.Message),
+            StockCannotGoNegativeException e   => (422, "INSUFFICIENT_STOCK",                e.Message),
+            InhouseCannotBeImportedException e => (422, "INHOUSE_IMPORT_FORBIDDEN",          e.Message),
+            ReviewRequiresPaidInvoiceException e => (422, "REVIEW_REQUIRES_PAID_INVOICE",    e.Message),
+            InvoiceRequiresCompletedOrderException e => (422, "INVOICE_REQUIRES_COMPLETED",  e.Message),
+            TableNotAvailableException e       => (422, "TABLE_NOT_AVAILABLE",               e.Message),
+            NotFoundException e   => (404, "NOT_FOUND", e.Message),
+            ValidationException e => (400, "VALIDATION_ERROR", string.Join("; ", e.Errors)),
+            ForbiddenException e  => (403, "FORBIDDEN",  e.Message),
+            DomainException e                  => (422, "DOMAIN_RULE_VIOLATION",             e.Message),
+            UnauthorizedAccessException e => (401, "UNAUTHORIZED", e.Message),
+
+            _ => (500, "INTERNAL_ERROR", "An unexpected error occurred.")
+        };
+
+        ctx.Response.StatusCode  = status;
+        ctx.Response.ContentType = "application/json";
+        await ctx.Response.WriteAsJsonAsync(new
         {
-            context.Response.StatusCode = ex switch
-            {
-                NotFoundDomainException => 404,
-                UnauthorizedDomainException => 401,
-                InvalidOperationDomainException => 400,
-                _ => 500
-            };
-            await context.Response.WriteAsJsonAsync(new { Error = ex.Message });
-        }
+            success = false,
+            error   = new { code, message }
+        });
     }
 }
-
 
 ``n
 
@@ -5725,6 +8732,9 @@ public class ApiResponse<T>
 `$language
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
+using FluentValidation;
+using MediatR;
+using RestaurantMS.Application.Common.Behaviors;
 
 namespace RestaurantMS.Application;
 
@@ -5732,9 +8742,12 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        services.AddMediatR(cfg => {
+        services.AddMediatR(cfg =>
+        {
             cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly());
+            cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
         });
+        services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
         return services;
     }
 }
@@ -5742,37 +8755,96 @@ public static class DependencyInjection
 
 ``n
 
-## File: RestaurantMS\src\RestaurantMS.Application\Common\Interfaces\IApplicationDbContext.cs
+## File: RestaurantMS\src\RestaurantMS.Application\Common\Behaviors\ValidationBehavior.cs
 `$language
-using Microsoft.EntityFrameworkCore;
-using RestaurantMS.Domain.Entities;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using FluentValidation;
+using MediatR;
+
+namespace RestaurantMS.Application.Common.Behaviors
+{
+    public class ValidationBehavior<TRequest, TResponse>
+        : IPipelineBehavior<TRequest, TResponse> where TRequest : notnull
+    {
+        private readonly IEnumerable<IValidator<TRequest>> _validators;
+        public ValidationBehavior(IEnumerable<IValidator<TRequest>> validators)
+            => _validators = validators;
+
+        public async Task<TResponse> Handle(
+            TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken ct)
+        {
+            if (!_validators.Any()) return await next();
+
+            var context  = new ValidationContext<TRequest>(request);
+            var failures = _validators
+                .Select(v => v.Validate(context))
+                .SelectMany(r => r.Errors)
+                .Where(f => f != null)
+                .ToList();
+
+            if (failures.Count > 0)
+                throw new FluentValidation.ValidationException(failures);
+
+            return await next();
+        }
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Common\Exceptions\ForbiddenException.cs
+`$language
+using System;
+
+namespace RestaurantMS.Application.Common.Exceptions;
+
+public class ForbiddenException : Exception
+{
+    public ForbiddenException(string message) : base(message) { }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Common\Exceptions\ValidationException.cs
+`$language
+using System;
+using System.Collections.Generic;
+
+namespace RestaurantMS.Application.Common.Exceptions;
+
+public class ValidationException : Exception
+{
+    public ValidationException(IEnumerable<string> errors) 
+        : base("Validation failed")
+    {
+        Errors = errors;
+    }
+
+    public IEnumerable<string> Errors { get; }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Common\Interfaces\ICurrentUserService.cs
+`$language
+namespace RestaurantMS.Application.Common.Interfaces;
+
+public interface ICurrentUserService
+{
+    long? UserId { get; }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Common\Interfaces\IDateTimeService.cs
+`$language
+using System;
 
 namespace RestaurantMS.Application.Common.Interfaces;
 
-public interface IApplicationDbContext
+public interface IDateTimeService
 {
-    DbSet<Category> Categories { get; }
-    DbSet<Customer> Customers { get; }
-    DbSet<DiscountCode> DiscountCodes { get; }
-    DbSet<FB> FBs { get; }
-    DbSet<Invoice> Invoices { get; }
-    DbSet<Manufacturer> Manufacturers { get; }
-    DbSet<OrderItem> OrderItems { get; }
-    DbSet<Receipt> Receipts { get; }
-    DbSet<ReceiptDetail> ReceiptDetails { get; }
-    DbSet<RestaurantOrder> Orders { get; }
-    DbSet<RestaurantTable> Tables { get; }
-    DbSet<Review> Reviews { get; }
-    DbSet<ReviewReply> ReviewReplies { get; }
-    DbSet<Staff> Staff { get; }
-    DbSet<TableReservation> TableReservations { get; }
-    DbSet<Warehouse> Warehouses { get; }
-
-    Task<int> SaveChangesAsync(CancellationToken cancellationToken);
+    DateTime UtcNow { get; }
 }
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Application\Common\Interfaces\IJwtTokenService.cs
@@ -5784,6 +8856,7 @@ namespace RestaurantMS.Application.Common.Interfaces;
 public interface IJwtTokenService
 {
     string GenerateCustomerToken(Customer customer);
+    string GenerateStaffToken(Staff staff);
 }
 
 ``n
@@ -5798,6 +8871,121 @@ public interface IPasswordHasher
     bool VerifyPassword(string password, string hash);
 }
 
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Common\Interfaces\IUnitOfWork.cs
+`$language
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Interfaces;
+
+namespace RestaurantMS.Application.Common.Interfaces
+{
+    public interface IUnitOfWork : IAsyncDisposable
+    {
+        IFBRepository           FBs           { get; }
+        ICategoryRepository     Categories    { get; }
+        IManufacturerRepository Manufacturers { get; }
+        IWarehouseRepository    Warehouses    { get; }
+        IRestaurantTableRepository    Tables  { get; }
+        ITableReservationRepository   Reservations { get; }
+        IRestaurantOrderRepository    Orders  { get; }
+        IOrderItemRepository    OrderItems    { get; }
+        IReceiptRepository      Receipts      { get; }
+        IReceiptDetailRepository ReceiptDetails { get; }
+        IInvoiceRepository      Invoices      { get; }
+        IDiscountCodeRepository DiscountCodes { get; }
+        IReviewRepository       Reviews       { get; }
+        IReviewReplyRepository  ReviewReplies { get; }
+        ICustomerRepository     Customers     { get; }
+        IStaffRepository        Staff         { get; }
+
+        Task BeginTransactionAsync(CancellationToken ct = default);
+        Task CommitAsync(CancellationToken ct = default);
+        Task RollbackAsync(CancellationToken ct = default);
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\DTOs\WarehouseReportRow.cs
+`$language
+using RestaurantMS.Domain.Enums;
+
+namespace RestaurantMS.Application.DTOs;
+
+public record WarehouseReportRow(long FBId, string Name, FBType Type, int Quantity, int LowStockThreshold, StockStatus StockStatus);
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Auth\Commands\LoginStaff\LoginStaffCommand.cs
+`$language
+using MediatR;
+
+namespace RestaurantMS.Application.Features.Auth.Commands.LoginStaff
+{
+    public record LoginStaffCommand(string Email, string Password) : IRequest<StaffAuthDto>;
+    public record StaffAuthDto(long StaffId, string FullName, string Role, string Token);
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Auth\Commands\LoginStaff\LoginStaffCommandHandler.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Exceptions;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.Auth.Commands.LoginStaff
+{
+    public class LoginStaffCommandHandler : IRequestHandler<LoginStaffCommand, StaffAuthDto>
+    {
+        private readonly IUnitOfWork _uow;
+        private readonly IPasswordHasher _hasher;
+        private readonly IJwtTokenService _jwt;
+
+        public LoginStaffCommandHandler(IUnitOfWork uow, IPasswordHasher hasher, IJwtTokenService jwt)
+            => (_uow, _hasher, _jwt) = (uow, hasher, jwt);
+
+        public async Task<StaffAuthDto> Handle(LoginStaffCommand req, CancellationToken ct)
+        {
+            // 1. Find by email
+            var staff = await _uow.Staff.GetByEmailAsync(req.Email)
+                ?? throw new NotFoundException(nameof(Staff), req.Email);
+
+            // 2. Must be active (Assuming IsActive property exists or omitting if not)
+            // if (!staff.IsActive)
+            //    throw new Exception("This account has been deactivated.");
+
+            // 3. BCrypt verify â€” NO MORE staffId.ToString() fallback
+            if (!_hasher.VerifyPassword(req.Password, staff.Password)) // assuming Password
+                throw new UnauthorizedAccessException("Invalid email or password.");
+
+            // 4. Generate JWT with MANAGER or ADMIN role claim
+            var token = _jwt.GenerateStaffToken(staff);
+
+            return new StaffAuthDto(staff.StaffId, staff.FullName, staff.Role, token);
+        }
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Auth\Commands\LoginStaff\LoginStaffCommandValidator.cs
+`$language
+using FluentValidation;
+
+namespace RestaurantMS.Application.Features.Auth.Commands.LoginStaff
+{
+    public class LoginStaffCommandValidator : AbstractValidator<LoginStaffCommand>
+    {
+        public LoginStaffCommandValidator()
+        {
+            RuleFor(x => x.Email).NotEmpty().EmailAddress();
+            RuleFor(x => x.Password).NotEmpty().MinimumLength(6);
+        }
+    }
+}
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Application\Features\Auth\Commands\RegisterCustomer\CustomerAuthDto.cs
@@ -5834,7 +9022,6 @@ public record RegisterCustomerCommand(
 ## File: RestaurantMS\src\RestaurantMS.Application\Features\Auth\Commands\RegisterCustomer\RegisterCustomerCommandHandler.cs
 `$language
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using RestaurantMS.Application.Common.Interfaces;
 using RestaurantMS.Domain.Entities;
 using RestaurantMS.Domain.Exceptions;
@@ -5843,16 +9030,16 @@ namespace RestaurantMS.Application.Features.Auth.Commands.RegisterCustomer;
 
 public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCommand, CustomerAuthDto>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly IUnitOfWork _uow;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IJwtTokenService _jwtTokenService;
 
     public RegisterCustomerCommandHandler(
-        IApplicationDbContext context,
+        IUnitOfWork uow,
         IPasswordHasher passwordHasher,
         IJwtTokenService jwtTokenService)
     {
-        _context = context;
+        _uow = uow;
         _passwordHasher = passwordHasher;
         _jwtTokenService = jwtTokenService;
     }
@@ -5860,12 +9047,12 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
     public async Task<CustomerAuthDto> Handle(RegisterCustomerCommand request, CancellationToken cancellationToken)
     {
         // Check if phone already exists
-        if (await _context.Customers.AnyAsync(c => c.Phone == request.Phone, cancellationToken))
+        if (await _uow.Customers.GetByPhoneAsync(request.Phone) != null)
         {
             throw new DomainException("Phone number is already registered.");
         }
 
-        var customer = new Customer
+        var customer = new RestaurantMS.Domain.Entities.Customer
         {
             FullName = request.FullName,
             Phone = request.Phone,
@@ -5878,8 +9065,7 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
             CreatedAt = DateTime.UtcNow
         };
 
-        _context.Customers.Add(customer);
-        await _context.SaveChangesAsync(cancellationToken);
+        customer.CustomerId = await _uow.Customers.InsertAndReturnIdAsync(customer);
 
         var token = _jwtTokenService.GenerateCustomerToken(customer);
 
@@ -5893,6 +9079,860 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
     }
 }
 
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Category\Queries\GetAllCategoriesQuery.cs
+`$language
+using MediatR;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Common.Interfaces;
+
+namespace RestaurantMS.Application.Features.Category.Queries;
+public record GetAllCategoriesQuery() : IRequest<IEnumerable<object>>;
+public class GetAllCategoriesQueryHandler : IRequestHandler<GetAllCategoriesQuery, IEnumerable<object>> {
+    private readonly IUnitOfWork _uow;
+    public GetAllCategoriesQueryHandler(IUnitOfWork uow) => _uow = uow;
+    public async Task<IEnumerable<object>> Handle(GetAllCategoriesQuery req, CancellationToken ct) {
+        var items = await _uow.Categories.GetAllAsync();
+        return items;
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Customer\Queries\GetAllCustomersQuery.cs
+`$language
+using MediatR;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Common.Interfaces;
+
+namespace RestaurantMS.Application.Features.Customer.Queries;
+public record GetAllCustomersQuery() : IRequest<IEnumerable<object>>;
+public class GetAllCustomersQueryHandler : IRequestHandler<GetAllCustomersQuery, IEnumerable<object>> {
+    private readonly IUnitOfWork _uow;
+    public GetAllCustomersQueryHandler(IUnitOfWork uow) => _uow = uow;
+    public async Task<IEnumerable<object>> Handle(GetAllCustomersQuery req, CancellationToken ct) {
+        var items = await _uow.Customers.GetAllAsync();
+        return items;
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\DiscountCode\Commands\CreateDiscountCodeCommand.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Application.Features.DiscountCode.Queries;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.DiscountCode.Commands;
+
+public record CreateDiscountCodeCommand(
+    string Code, string DiscountType, decimal Value,
+    decimal? MinOrderAmount, decimal? MaxDiscountAmount,
+    DateTime ValidFrom, DateTime ValidTo, int? UsageLimit) : IRequest<DiscountCodeDto>;
+
+public class CreateDiscountCodeCommandHandler : IRequestHandler<CreateDiscountCodeCommand, DiscountCodeDto>
+{
+    private readonly IUnitOfWork _uow;
+    public CreateDiscountCodeCommandHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<DiscountCodeDto> Handle(CreateDiscountCodeCommand cmd, CancellationToken ct)
+    {
+        var code = new Domain.Entities.DiscountCode {
+            Code = cmd.Code,
+            DiscountType = cmd.DiscountType,
+            DiscountValue = cmd.Value,
+            MinOrderAmount = cmd.MinOrderAmount,
+            MaxDiscountAmount = cmd.MaxDiscountAmount,
+            ValidFrom = cmd.ValidFrom,
+            ValidTo = cmd.ValidTo,
+            UsageLimit = cmd.UsageLimit,
+            UsedCount = 0,
+            IsActive = true
+        };
+        await _uow.DiscountCodes.AddAsync(code);
+        return new DiscountCodeDto(code.DiscountCodeId, code.Code, code.DiscountType, code.DiscountValue, code.MinOrderAmount, code.MaxDiscountAmount, code.IsActive, code.ValidTo, code.UsedCount, code.UsageLimit);
+    }
+}
+
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\DiscountCode\Commands\ToggleDiscountCodeCommand.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Domain.Exceptions;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.DiscountCode.Commands;
+
+public record ToggleDiscountCodeCommand(long Id) : IRequest<Unit>;
+
+public class ToggleDiscountCodeCommandHandler : IRequestHandler<ToggleDiscountCodeCommand, Unit>
+{
+    private readonly IUnitOfWork _uow;
+    public ToggleDiscountCodeCommandHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<Unit> Handle(ToggleDiscountCodeCommand cmd, CancellationToken ct)
+    {
+        var code = await _uow.DiscountCodes.GetByIdAsync(cmd.Id)
+            ?? throw new NotFoundException("DiscountCode", cmd.Id);
+        code.IsActive = !code.IsActive;
+        await _uow.DiscountCodes.UpdateAsync(code);
+        return Unit.Value;
+    }
+}
+
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\DiscountCode\Queries\GetDiscountCodesQuery.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.DiscountCode.Queries;
+
+public record GetDiscountCodesQuery() : IRequest<IEnumerable<DiscountCodeDto>>;
+
+public class GetDiscountCodesQueryHandler : IRequestHandler<GetDiscountCodesQuery, IEnumerable<DiscountCodeDto>>
+{
+    private readonly IUnitOfWork _uow;
+    public GetDiscountCodesQueryHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<IEnumerable<DiscountCodeDto>> Handle(GetDiscountCodesQuery req, CancellationToken ct)
+    {
+        var codes = await _uow.DiscountCodes.GetAllAsync();
+        return codes.Select(c => new DiscountCodeDto(c.DiscountCodeId, c.Code, c.DiscountType,
+            c.DiscountValue, c.MinOrderAmount, c.MaxDiscountAmount,
+            c.IsActive, c.ValidTo, c.UsedCount, c.UsageLimit));
+    }
+}
+
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\DiscountCode\Queries\ValidateDiscountCodeQuery.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Domain.Exceptions;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.DiscountCode.Queries;
+
+public record ValidateDiscountCodeQuery(string Code) : IRequest<DiscountCodeDto>;
+public record DiscountCodeDto(
+    long Id, string Code, string DiscountType, decimal Value,
+    decimal? MinOrderAmount, decimal? MaxDiscountAmount,
+    bool IsActive, DateTime ValidTo, int UsedCount, int? UsageLimit);
+
+public class ValidateDiscountCodeQueryHandler : IRequestHandler<ValidateDiscountCodeQuery, DiscountCodeDto>
+{
+    private readonly IUnitOfWork _uow;
+    public ValidateDiscountCodeQueryHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<DiscountCodeDto> Handle(ValidateDiscountCodeQuery req, CancellationToken ct)
+    {
+        var code = await _uow.DiscountCodes.GetByCodeAsync(req.Code)
+            ?? throw new NotFoundException("DiscountCode", req.Code);
+
+        if (!code.IsActive) throw new DomainException("Discount code is not active.");
+        if (code.ValidTo < DateTime.UtcNow) throw new DomainException("Discount code has expired.");
+        if (code.UsageLimit > 0 && code.UsedCount >= code.UsageLimit) throw new DomainException("Discount code usage limit reached.");
+
+        return new DiscountCodeDto(
+            code.DiscountCodeId, code.Code, code.DiscountType, code.DiscountValue,
+            code.MinOrderAmount, code.MaxDiscountAmount,
+            code.IsActive, code.ValidTo, code.UsedCount, code.UsageLimit);
+    }
+}
+
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Invoice\Commands\PayInvoiceCommand.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Application.Features.Invoice.Commands.ApplyDiscount;
+using RestaurantMS.Domain.Exceptions;
+using RestaurantMS.Domain.Enums;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.Invoice.Commands;
+
+public record PayInvoiceCommand(long InvoiceId, string Method, long CashierId) : IRequest<InvoiceDto>;
+
+public class PayInvoiceCommandHandler : IRequestHandler<PayInvoiceCommand, InvoiceDto>
+{
+    private readonly IUnitOfWork _uow;
+    public PayInvoiceCommandHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<InvoiceDto> Handle(PayInvoiceCommand cmd, CancellationToken ct)
+    {
+        var invoice = await _uow.Invoices.GetByIdAsync(cmd.InvoiceId)
+            ?? throw new NotFoundException("Invoice", cmd.InvoiceId);
+
+        var method = Enum.Parse<PaymentMethod>(cmd.Method, ignoreCase: true);
+        invoice.MarkPaid(method, cmd.CashierId);
+        await _uow.Invoices.UpdateAsync(invoice);
+
+        return new InvoiceDto(invoice.InvoiceId, invoice.OrderId,
+            invoice.Subtotal, invoice.DiscountAmount, invoice.Total,
+            invoice.Status.ToString());
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Invoice\Commands\ApplyDiscount\ApplyDiscountCommandHandler.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Exceptions;
+using RestaurantMS.Domain.Enums;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.Invoice.Commands.ApplyDiscount
+{
+    public record ApplyDiscountCommand(long InvoiceId, string DiscountCode) : IRequest<InvoiceDto>;
+    public record InvoiceDto(long InvoiceId, long OrderId, decimal Subtotal, decimal DiscountAmount, decimal Total, string Status);
+
+    public class ApplyDiscountCommandHandler : IRequestHandler<ApplyDiscountCommand, InvoiceDto>
+    {
+        private readonly IUnitOfWork _uow;
+        public ApplyDiscountCommandHandler(IUnitOfWork uow) => _uow = uow;
+
+        public async Task<InvoiceDto> Handle(ApplyDiscountCommand cmd, CancellationToken ct)
+        {
+            var invoice = await _uow.Invoices.GetByIdAsync(cmd.InvoiceId)
+                ?? throw new NotFoundException(nameof(RestaurantMS.Domain.Entities.Invoice), cmd.InvoiceId);
+            var code = await _uow.DiscountCodes.GetByCodeAsync(cmd.DiscountCode)
+                ?? throw new NotFoundException("DiscountCode", cmd.DiscountCode);
+
+            // All validation before any DB write
+            if (!code.IsActive)          throw new DomainException("Discount code is not active.");
+            if (code.ValidTo < DateTime.UtcNow) throw new DomainException("Discount code has expired.");
+            if (code.UsageLimit > 0 && code.UsedCount >= code.UsageLimit)
+                throw new DomainException("Discount code usage limit reached.");
+            if (invoice.Subtotal < code.MinOrderAmount)
+                throw new DomainException($"Minimum order for this code is {code.MinOrderAmount:N0}.");
+
+            var discountAmt = code.DiscountType == "PERCENT" // Adjust to enum if needed
+                ? invoice.Subtotal * code.DiscountValue / 100m : code.DiscountValue;
+            if (code.MaxDiscountAmount > 0)
+                discountAmt = Math.Min(discountAmt, code.MaxDiscountAmount.Value);
+
+            invoice.ApplyDiscount(discountAmt);
+            invoice.DiscountCodeId = code.DiscountCodeId;
+
+            await _uow.BeginTransactionAsync(ct);
+            try
+            {
+                await _uow.Invoices.UpdateAsync(invoice);
+                await _uow.DiscountCodes.IncrementUsedCountAsync(code.DiscountCodeId); // atomic
+                await _uow.CommitAsync(ct);
+            }
+            catch { await _uow.RollbackAsync(ct); throw; }
+
+            return new InvoiceDto(invoice.InvoiceId, invoice.OrderId,
+                invoice.Subtotal, invoice.DiscountAmount, invoice.Total, invoice.Status.ToString());
+        }
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Invoice\Commands\CreateInvoice\CreateInvoiceCommandHandler.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Exceptions;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.Invoice.Commands.CreateInvoice
+{
+    public record CreateInvoiceCommand(long OrderId) : IRequest<InvoiceDto>;
+    public record InvoiceDto(long InvoiceId, long OrderId, decimal Subtotal, decimal DiscountAmount, decimal Total, string Status);
+
+    public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand, InvoiceDto>
+    {
+        private readonly IUnitOfWork _uow;
+        public CreateInvoiceCommandHandler(IUnitOfWork uow) => _uow = uow;
+
+        public async Task<InvoiceDto> Handle(CreateInvoiceCommand cmd, CancellationToken ct)
+        {
+            var order = await _uow.Orders.GetWithItemsAsync(cmd.OrderId)
+                ?? throw new NotFoundException(nameof(RestaurantOrder), cmd.OrderId);
+
+            // Enforce 1 invoice per order
+            var existing = await _uow.Invoices.GetByOrderIdAsync(cmd.OrderId);
+            if (existing != null)
+                throw new DomainException($"Order {cmd.OrderId} already has an invoice.");
+
+            var subtotal = order.OrderItems.Sum(i => i.Quantity * i.UnitPrice);
+
+            // Domain factory â€” throws InvoiceRequiresCompletedOrderException if not COMPLETED
+            var invoice = RestaurantMS.Domain.Entities.Invoice.Create(order, subtotal);
+
+            await _uow.BeginTransactionAsync(ct);
+            try
+            {
+                invoice.InvoiceId = await _uow.Invoices.InsertAndReturnIdAsync(invoice);
+                await _uow.CommitAsync(ct);
+            }
+            catch { await _uow.RollbackAsync(ct); throw; }
+
+            return new InvoiceDto(invoice.InvoiceId, invoice.OrderId,
+                invoice.Subtotal, 0, invoice.Subtotal, "UNPAID");
+        }
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Invoice\Queries\GetAllInvoicesQuery.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Application.Features.Invoice.Commands.ApplyDiscount;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.Invoice.Queries;
+
+public record GetAllInvoicesQuery() : IRequest<IEnumerable<InvoiceDto>>;
+
+public class GetAllInvoicesQueryHandler : IRequestHandler<GetAllInvoicesQuery, IEnumerable<InvoiceDto>>
+{
+    private readonly IUnitOfWork _uow;
+    public GetAllInvoicesQueryHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<IEnumerable<InvoiceDto>> Handle(GetAllInvoicesQuery req, CancellationToken ct)
+    {
+        var invoices = await _uow.Invoices.GetAllAsync();
+        return invoices.Select(i => new InvoiceDto(i.InvoiceId, i.OrderId, i.Subtotal, i.DiscountAmount, i.Total, i.Status.ToString()));
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Invoice\Queries\GetInvoiceQuery.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Application.Features.Invoice.Commands.ApplyDiscount;
+using RestaurantMS.Domain.Exceptions;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.Invoice.Queries;
+
+public record GetInvoiceQuery(long InvoiceId) : IRequest<InvoiceDto>;
+
+public class GetInvoiceQueryHandler : IRequestHandler<GetInvoiceQuery, InvoiceDto>
+{
+    private readonly IUnitOfWork _uow;
+    public GetInvoiceQueryHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<InvoiceDto> Handle(GetInvoiceQuery req, CancellationToken ct)
+    {
+        var invoice = await _uow.Invoices.GetByIdAsync(req.InvoiceId)
+            ?? throw new NotFoundException("Invoice", req.InvoiceId);
+        return new InvoiceDto(invoice.InvoiceId, invoice.OrderId, invoice.Subtotal, invoice.DiscountAmount, invoice.Total, invoice.Status.ToString());
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Manufacturer\Queries\GetManufacturersQuery.cs
+`$language
+using MediatR;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Common.Interfaces;
+
+namespace RestaurantMS.Application.Features.Manufacturer.Queries;
+public record GetManufacturersQuery() : IRequest<IEnumerable<object>>;
+public class GetManufacturersQueryHandler : IRequestHandler<GetManufacturersQuery, IEnumerable<object>> {
+    private readonly IUnitOfWork _uow;
+    public GetManufacturersQueryHandler(IUnitOfWork uow) => _uow = uow;
+    public async Task<IEnumerable<object>> Handle(GetManufacturersQuery req, CancellationToken ct) {
+        var items = await _uow.Manufacturers.GetAllAsync();
+        return items;
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Order\Commands\CompleteOrderCommand.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Domain.Exceptions;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.Order.Commands;
+
+public record CompleteOrderCommand(long OrderId) : IRequest<Unit>;
+
+public class CompleteOrderCommandHandler : IRequestHandler<CompleteOrderCommand, Unit>
+{
+    private readonly IUnitOfWork _uow;
+    public CompleteOrderCommandHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<Unit> Handle(CompleteOrderCommand req, CancellationToken ct)
+    {
+        var order = await _uow.Orders.GetByIdAsync(req.OrderId) ?? throw new NotFoundException("Order", req.OrderId);
+        order.Complete(); // will throw if not SERVING or appropriate state
+        await _uow.Orders.UpdateStatusAsync(req.OrderId, Domain.Enums.OrderStatus.COMPLETED);
+        return Unit.Value;
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Order\Commands\CreateOrderCommand.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Domain.Entities;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.Order.Commands;
+
+public record CreateOrderCommand(long TableId, long? ReservationId, long? CustomerId) : IRequest<OrderDto>;
+public record OrderDto(long OrderId, long TableId, string Status, DateTime CreatedAt);
+
+public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, OrderDto>
+{
+    private readonly IUnitOfWork _uow;
+    public CreateOrderCommandHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<OrderDto> Handle(CreateOrderCommand req, CancellationToken ct)
+    {
+        var order = new RestaurantOrder {
+            TableId = (int)req.TableId,
+            ReservationId = req.ReservationId,
+            CustomerId = req.CustomerId,
+            Status = Domain.Enums.OrderStatus.PENDING,
+            CreatedAt = DateTime.UtcNow
+        };
+        var id = await _uow.Orders.InsertAndReturnIdAsync(order);
+        return new OrderDto(id, req.TableId, "PENDING", order.CreatedAt);
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Order\Commands\StartServingCommand.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Domain.Enums;
+using RestaurantMS.Domain.Exceptions;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.Order.Commands;
+
+public record StartServingCommand(long OrderId) : IRequest<Unit>;
+
+public class StartServingCommandHandler : IRequestHandler<StartServingCommand, Unit>
+{
+    private readonly IUnitOfWork _uow;
+    public StartServingCommandHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<Unit> Handle(StartServingCommand cmd, CancellationToken ct)
+    {
+        var order = await _uow.Orders.GetByIdAsync(cmd.OrderId)
+            ?? throw new NotFoundException("RestaurantOrder", cmd.OrderId);
+        order.StartServing(); // PENDING -> SERVING
+        await _uow.Orders.UpdateStatusAsync(cmd.OrderId, OrderStatus.SERVING);
+        return Unit.Value;
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Order\Commands\AddOrderItem\AddOrderItemCommandHandler.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Exceptions;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.Order.Commands.AddOrderItem
+{
+    public record AddOrderItemCommand(long OrderId, long FBId, int Quantity) : IRequest<OrderItemDto>;
+    public record OrderItemDto(long OrderItemId, string FBName, int Quantity, decimal UnitPrice);
+
+    public class AddOrderItemCommandHandler : IRequestHandler<AddOrderItemCommand, OrderItemDto>
+    {
+        private readonly IUnitOfWork _uow;
+        public AddOrderItemCommandHandler(IUnitOfWork uow) => _uow = uow;
+
+        public async Task<OrderItemDto> Handle(AddOrderItemCommand cmd, CancellationToken ct)
+        {
+            // 1. Load â€” throw NotFoundException if missing
+            var order = await _uow.Orders.GetByIdAsync(cmd.OrderId)
+                ?? throw new NotFoundException(nameof(RestaurantOrder), cmd.OrderId);
+            var fb = await _uow.FBs.GetByIdAsync(cmd.FBId)
+                ?? throw new NotFoundException(nameof(FB), cmd.FBId);
+            var warehouse = await _uow.Warehouses.GetByFBIdAsync(cmd.FBId)
+                ?? throw new NotFoundException(nameof(Warehouse), cmd.FBId);
+
+            // 2. Domain invariants (throw typed domain exceptions)
+            if (!fb.IsSellable())              // FRESH_RAW check lives in FB.IsSellable()
+                throw new FreshRawCannotBeSoldException(fb.Name);
+            if (!order.CanAddItem())
+                throw new DomainException($"Cannot add items to a '{order.Status}' order.");
+
+            // 3. Deduct stock â€” REGULAR: throws StockCannotGoNegativeException if qty < 0
+            warehouse.DeductStock(cmd.Quantity, fb.Name);
+
+            // 4. Create OrderItem
+            var item = new OrderItem { OrderId = cmd.OrderId, ItemId = (int)cmd.FBId,
+                Quantity = cmd.Quantity, UnitPrice = fb.Price };
+
+            // 5. Persist atomically â€” SINGLE transaction
+            await _uow.BeginTransactionAsync(ct);
+            try
+            {
+                item.OrderItemId = await _uow.OrderItems.InsertAndReturnIdAsync(item);
+                await _uow.Warehouses.UpdateQuantityAsync(fb.ItemId, warehouse.Quantity);
+                await _uow.CommitAsync(ct);
+            }
+            catch { await _uow.RollbackAsync(ct); throw; }
+
+            // 6. Return DTO â€” NEVER the entity
+            return new OrderItemDto(item.OrderItemId, fb.Name, item.Quantity, item.UnitPrice);
+        }
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Order\Commands\CancelOrder\CancelOrderCommandHandler.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
+using RestaurantMS.Domain.Exceptions;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.Order.Commands.CancelOrder
+{
+    public record CancelOrderCommand(long OrderId) : IRequest<Unit>;
+
+    public class CancelOrderCommandHandler : IRequestHandler<CancelOrderCommand, Unit>
+    {
+        private readonly IUnitOfWork _uow;
+        public CancelOrderCommandHandler(IUnitOfWork uow) => _uow = uow;
+
+        public async Task<Unit> Handle(CancelOrderCommand cmd, CancellationToken ct)
+        {
+            var order = await _uow.Orders.GetByIdAsync(cmd.OrderId)
+                ?? throw new NotFoundException(nameof(RestaurantOrder), cmd.OrderId);
+
+            order.Cancel(); // throws DomainException if status == COMPLETED
+
+            var items = await _uow.OrderItems.GetByOrderIdAsync(cmd.OrderId);
+
+            await _uow.BeginTransactionAsync(ct);
+            try
+            {
+                foreach (var item in items)
+                {
+                    var wh = await _uow.Warehouses.GetByFBIdAsync(item.ItemId);
+                    if (wh != null)
+                    {
+                        wh.RestoreStock(item.Quantity);
+                        await _uow.Warehouses.UpdateQuantityAsync(item.ItemId, wh.Quantity);
+                    }
+                }
+                await _uow.Orders.UpdateStatusAsync(cmd.OrderId, OrderStatus.CANCELLED);
+                await _uow.CommitAsync(ct);
+            }
+            catch { await _uow.RollbackAsync(ct); throw; }
+
+            return Unit.Value;
+        }
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Order\Queries\GetAllOrdersQuery.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Application.Features.Order.Commands;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.Order.Queries;
+
+public record GetAllOrdersQuery() : IRequest<IEnumerable<OrderDto>>;
+
+public class GetAllOrdersQueryHandler : IRequestHandler<GetAllOrdersQuery, IEnumerable<OrderDto>>
+{
+    private readonly IUnitOfWork _uow;
+    public GetAllOrdersQueryHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<IEnumerable<OrderDto>> Handle(GetAllOrdersQuery req, CancellationToken ct)
+    {
+        var orders = await _uow.Orders.GetAllAsync();
+        return orders.Select(o => new OrderDto(o.OrderId, o.TableId, o.Status.ToString(), o.CreatedAt));
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Order\Queries\GetOrderQuery.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Application.Features.Order.Commands;
+using RestaurantMS.Domain.Exceptions;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.Order.Queries;
+
+public record GetOrderQuery(long OrderId) : IRequest<OrderDto>;
+
+public class GetOrderQueryHandler : IRequestHandler<GetOrderQuery, OrderDto>
+{
+    private readonly IUnitOfWork _uow;
+    public GetOrderQueryHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<OrderDto> Handle(GetOrderQuery req, CancellationToken ct)
+    {
+        var order = await _uow.Orders.GetByIdAsync(req.OrderId) ?? throw new NotFoundException("Order", req.OrderId);
+        return new OrderDto(order.OrderId, order.TableId, order.Status.ToString(), order.CreatedAt);
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Receipt\Commands\CreateReceipt\CreateReceiptCommandHandler.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Exceptions;
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.Receipt.Commands.CreateReceipt
+{
+    public record ReceiptItemDto(long FBId, int Quantity, decimal UnitPrice);
+    public record CreateReceiptCommand(int ManufacturerId, List<ReceiptItemDto> Items) : IRequest<ReceiptDto>;
+    public record ReceiptDto(long ReceiptId, int ManufacturerId, DateTime ImportedAt);
+
+    public class CreateReceiptCommandHandler : IRequestHandler<CreateReceiptCommand, ReceiptDto>
+    {
+        private readonly IUnitOfWork _uow;
+        private readonly ICurrentUserService _currentUser;
+
+        public CreateReceiptCommandHandler(IUnitOfWork uow, ICurrentUserService currentUser)
+        {
+            _uow = uow;
+            _currentUser = currentUser;
+        }
+
+        public async Task<ReceiptDto> Handle(CreateReceiptCommand cmd, CancellationToken ct)
+        {
+            var manufacturer = await _uow.Manufacturers.GetByIdAsync(cmd.ManufacturerId)
+                ?? throw new NotFoundException(nameof(Manufacturer), cmd.ManufacturerId);
+
+            await _uow.BeginTransactionAsync(ct);
+            try
+            {
+                var receipt = new RestaurantMS.Domain.Entities.Receipt { ManufacturerId = cmd.ManufacturerId,
+                    CreatedBy = _currentUser.UserId ?? 0, ReceiptDate = DateTime.UtcNow };
+                receipt.ReceiptId = await _uow.Receipts.InsertAndReturnIdAsync(receipt);
+
+                foreach (var line in cmd.Items)
+                {
+                    var fb = await _uow.FBs.GetByIdAsync(line.FBId)
+                        ?? throw new NotFoundException(nameof(FB), line.FBId);
+
+                    // Domain rule: INHOUSE forbidden + same manufacturer enforced
+                    RestaurantMS.Domain.Entities.Receipt.ValidateItem(fb, cmd.ManufacturerId);
+
+                    await _uow.ReceiptDetails.InsertAndReturnIdAsync(new ReceiptDetail {
+                        ReceiptId = receipt.ReceiptId, ItemId = (int)line.FBId,
+                        Quantity = line.Quantity, ImportPrice = line.UnitPrice });
+
+                    // Auto-add stock after import
+                    var wh = await _uow.Warehouses.GetByFBIdAsync(line.FBId);
+                    if (wh != null) {
+                        wh.AddStock(line.Quantity);
+                        await _uow.Warehouses.UpdateQuantityAsync(line.FBId, wh.Quantity);
+                    }
+                }
+                await _uow.CommitAsync(ct);
+                return new ReceiptDto(receipt.ReceiptId, cmd.ManufacturerId, receipt.ReceiptDate);
+            }
+            catch { await _uow.RollbackAsync(ct); throw; }
+        }
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Receipt\Queries\GetAllReceiptsQuery.cs
+`$language
+using MediatR;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Common.Interfaces;
+
+namespace RestaurantMS.Application.Features.Receipt.Queries;
+public record GetAllReceiptsQuery() : IRequest<IEnumerable<object>>;
+public class GetAllReceiptsQueryHandler : IRequestHandler<GetAllReceiptsQuery, IEnumerable<object>> {
+    private readonly IUnitOfWork _uow;
+    public GetAllReceiptsQueryHandler(IUnitOfWork uow) => _uow = uow;
+    public async Task<IEnumerable<object>> Handle(GetAllReceiptsQuery req, CancellationToken ct) {
+        var items = await _uow.Receipts.GetAllAsync();
+        return items;
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Reservation\Queries\GetAllReservationsQuery.cs
+`$language
+using MediatR;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Common.Interfaces;
+
+namespace RestaurantMS.Application.Features.Reservation.Queries;
+public record GetAllReservationsQuery() : IRequest<IEnumerable<object>>;
+public class GetAllReservationsQueryHandler : IRequestHandler<GetAllReservationsQuery, IEnumerable<object>> {
+    private readonly IUnitOfWork _uow;
+    public GetAllReservationsQueryHandler(IUnitOfWork uow) => _uow = uow;
+    public async Task<IEnumerable<object>> Handle(GetAllReservationsQuery req, CancellationToken ct) {
+        var items = await _uow.Reservations.GetAllAsync();
+        return items;
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Review\Commands\CreateReview\CreateReviewCommandHandler.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Exceptions;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.Review.Commands.CreateReview
+{
+    public record CreateReviewCommand(long InvoiceId, int Stars, string Content) : IRequest<ReviewDto>;
+    public record ReviewDto(long ReviewId, long InvoiceId, int Stars, string Content);
+
+    public class CreateReviewCommandHandler : IRequestHandler<CreateReviewCommand, ReviewDto>
+    {
+        private readonly IUnitOfWork _uow;
+        private readonly ICurrentUserService _currentUser;
+
+        public CreateReviewCommandHandler(IUnitOfWork uow, ICurrentUserService currentUser)
+        {
+            _uow = uow;
+            _currentUser = currentUser;
+        }
+
+        public async Task<ReviewDto> Handle(CreateReviewCommand cmd, CancellationToken ct)
+        {
+            var invoice = await _uow.Invoices.GetByIdAsync(cmd.InvoiceId)
+                ?? throw new NotFoundException(nameof(RestaurantMS.Domain.Entities.Invoice), cmd.InvoiceId);
+
+            // Enforce 1 review per invoice
+            if (await _uow.Reviews.ExistsByInvoiceIdAsync(cmd.InvoiceId))
+                throw new DomainException("This invoice already has a review.");
+
+            // Domain factory: throws ReviewRequiresPaidInvoiceException if not PAID
+            var review = RestaurantMS.Domain.Entities.Review.Create(invoice, _currentUser.UserId ?? 0, cmd.Stars, cmd.Content);
+
+            review.ReviewId = await _uow.Reviews.InsertAndReturnIdAsync(review);
+            return new ReviewDto(review.ReviewId, cmd.InvoiceId, review.Stars, review.Content ?? string.Empty);
+        }
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Review\Queries\GetAllReviewsQuery.cs
+`$language
+using MediatR;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Common.Interfaces;
+
+namespace RestaurantMS.Application.Features.Review.Queries;
+public record GetAllReviewsQuery() : IRequest<IEnumerable<object>>;
+public class GetAllReviewsQueryHandler : IRequestHandler<GetAllReviewsQuery, IEnumerable<object>> {
+    private readonly IUnitOfWork _uow;
+    public GetAllReviewsQueryHandler(IUnitOfWork uow) => _uow = uow;
+    public async Task<IEnumerable<object>> Handle(GetAllReviewsQuery req, CancellationToken ct) {
+        var items = await _uow.Reviews.GetAllAsync();
+        return items;
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Application\Features\Staff\Queries\GetStaffQuery.cs
+`$language
+using MediatR;
+using RestaurantMS.Application.Common.Interfaces;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RestaurantMS.Application.Features.Staff.Queries;
+
+public record GetStaffQuery() : IRequest<IEnumerable<StaffDto>>;
+public record StaffDto(long StaffId, string FullName, string Email, string Role, bool IsActive);
+
+public class GetStaffQueryHandler : IRequestHandler<GetStaffQuery, IEnumerable<StaffDto>>
+{
+    private readonly IUnitOfWork _uow;
+    public GetStaffQueryHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<IEnumerable<StaffDto>> Handle(GetStaffQuery req, CancellationToken ct)
+    {
+        var staff = await _uow.Staff.GetAllAsync();
+        return staff.Select(s => new StaffDto(s.StaffId, s.FullName, s.Email, s.Role, s.IsActive));
+    }
+}
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Application\Interfaces\ICategoryRepository.cs
@@ -5930,8 +9970,10 @@ public interface ICustomerRepository
     Task AddAsync(Customer entity);
     Task UpdateAsync(Customer entity);
     Task DeleteAsync(long id);
+    Task<Customer?> GetByPhoneAsync(string phone);
+    Task UpdateLoyaltyPointsAsync(long customerId, int points);
+    Task<long> InsertAndReturnIdAsync(Customer entity);
 }
-
 
 ``n
 
@@ -5950,8 +9992,9 @@ public interface IDiscountCodeRepository
     Task AddAsync(DiscountCode entity);
     Task UpdateAsync(DiscountCode entity);
     Task DeleteAsync(long id);
+    Task<DiscountCode?> GetByCodeAsync(string code);
+    Task IncrementUsedCountAsync(long discountCodeId);
 }
-
 
 ``n
 
@@ -5970,8 +10013,9 @@ public interface IFBRepository
     Task AddAsync(FB entity);
     Task UpdateAsync(FB entity);
     Task DeleteAsync(long id);
+    Task<IEnumerable<FB>> GetMenuAsync(bool includeInhouse = false);
+    Task<long> InsertAndReturnIdAsync(FB entity);
 }
-
 
 ``n
 
@@ -5990,8 +10034,9 @@ public interface IInvoiceRepository
     Task AddAsync(Invoice entity);
     Task UpdateAsync(Invoice entity);
     Task DeleteAsync(long id);
+    Task<Invoice?> GetByOrderIdAsync(long orderId);
+    Task<long> InsertAndReturnIdAsync(Invoice invoice);
 }
-
 
 ``n
 
@@ -6030,8 +10075,9 @@ public interface IOrderItemRepository
     Task AddAsync(OrderItem entity);
     Task UpdateAsync(OrderItem entity);
     Task DeleteAsync(long id);
+    Task<IEnumerable<OrderItem>> GetByOrderIdAsync(long orderId);
+    Task<long> InsertAndReturnIdAsync(OrderItem item);
 }
-
 
 ``n
 
@@ -6050,6 +10096,9 @@ public interface IReceiptDetailRepository
     Task AddAsync(ReceiptDetail entity);
     Task UpdateAsync(ReceiptDetail entity);
     Task DeleteAsync(long id);
+    Task<long> InsertAndReturnIdAsync(ReceiptDetail entity);
+    Task<IEnumerable<ReceiptDetail>> GetByReceiptIdAsync(long receiptId);
+    Task DeleteByReceiptIdAsync(long receiptId);
 }
 
 
@@ -6070,8 +10119,9 @@ public interface IReceiptRepository
     Task AddAsync(Receipt entity);
     Task UpdateAsync(Receipt entity);
     Task DeleteAsync(long id);
+    Task<Receipt?> GetWithDetailsAsync(long receiptId);
+    Task<long> InsertAndReturnIdAsync(Receipt receipt);
 }
-
 
 ``n
 
@@ -6080,6 +10130,7 @@ public interface IReceiptRepository
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
 
 namespace RestaurantMS.Application.Interfaces;
 
@@ -6090,8 +10141,11 @@ public interface IRestaurantOrderRepository
     Task AddAsync(RestaurantOrder entity);
     Task UpdateAsync(RestaurantOrder entity);
     Task DeleteAsync(long id);
+    Task<RestaurantOrder?> GetWithItemsAsync(long orderId);
+    Task<IEnumerable<RestaurantOrder>> GetByTableAsync(long tableId);
+    Task<long> InsertAndReturnIdAsync(RestaurantOrder order);
+    Task UpdateStatusAsync(long orderId, OrderStatus status);
 }
-
 
 ``n
 
@@ -6150,8 +10204,9 @@ public interface IReviewRepository
     Task AddAsync(Review entity);
     Task UpdateAsync(Review entity);
     Task DeleteAsync(long id);
+    Task<bool> ExistsByInvoiceIdAsync(long invoiceId);
+    Task<long> InsertAndReturnIdAsync(Review review);
 }
-
 
 ``n
 
@@ -6170,8 +10225,8 @@ public interface IStaffRepository
     Task AddAsync(Staff entity);
     Task UpdateAsync(Staff entity);
     Task DeleteAsync(long id);
+    Task<Staff?> GetByEmailAsync(string email);
 }
-
 
 ``n
 
@@ -6180,6 +10235,7 @@ public interface IStaffRepository
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
 
 namespace RestaurantMS.Application.Interfaces;
 
@@ -6190,8 +10246,9 @@ public interface ITableReservationRepository
     Task AddAsync(TableReservation entity);
     Task UpdateAsync(TableReservation entity);
     Task DeleteAsync(long id);
+    Task<IEnumerable<TableReservation>> GetByCustomerIdAsync(long customerId);
+    Task UpdateStatusAsync(long reservationId, ReservationStatus status);
 }
-
 
 ``n
 
@@ -6200,6 +10257,8 @@ public interface ITableReservationRepository
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
+using RestaurantMS.Application.DTOs;
 
 namespace RestaurantMS.Application.Interfaces;
 
@@ -6210,8 +10269,10 @@ public interface IWarehouseRepository
     Task AddAsync(Warehouse entity);
     Task UpdateAsync(Warehouse entity);
     Task DeleteAsync(long id);
+    Task<Warehouse?> GetByFBIdAsync(long fbId);
+    Task UpdateQuantityAsync(long fbId, int newQuantity);
+    Task<IEnumerable<WarehouseReportRow>> GetReportAsync();
 }
-
 
 ``n
 
@@ -6303,6 +10364,9 @@ namespace RestaurantMS.Domain.Entities
 using System;
 using System.Collections.Generic;
 
+using RestaurantMS.Domain.Exceptions;
+using RestaurantMS.Domain.Enums;
+
 namespace RestaurantMS.Domain.Entities
 {
     public class FB
@@ -6314,7 +10378,10 @@ namespace RestaurantMS.Domain.Entities
         public Manufacturer? Manufacturer { get; set; }
         public string Name { get; set; } = string.Empty;
         public string Unit { get; set; } = string.Empty;
+        public string? Description { get; set; }
         public decimal Price { get; set; }
+        public FBType Type { get; set; }
+        public bool IsVisible { get; set; }
         public string ItemType { get; set; } = string.Empty;
         public string StockStatus { get; set; } = string.Empty;
         public bool ShowOnMenu { get; set; }
@@ -6323,6 +10390,17 @@ namespace RestaurantMS.Domain.Entities
         public Warehouse? Warehouse { get; set; }
         public ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
         public ICollection<ReceiptDetail> ReceiptDetails { get; set; } = new List<ReceiptDetail>();
+
+        // Mirrors business rule: FRESH_RAW items are never available for sale
+        public bool IsSellable() => Type != FBType.FRESH_RAW && IsVisible;
+
+        // Domain invariant: FRESH_RAW can never be made visible on menu
+        public void SetVisibility(bool visible)
+        {
+            if (Type == FBType.FRESH_RAW && visible)
+                throw new DomainException("FRESH_RAW items cannot be shown on the menu.");
+            IsVisible = visible;
+        }
     }
 }
 
@@ -6332,6 +10410,9 @@ namespace RestaurantMS.Domain.Entities
 `$language
 using System;
 using System.Collections.Generic;
+
+using RestaurantMS.Domain.Exceptions;
+using RestaurantMS.Domain.Enums;
 
 namespace RestaurantMS.Domain.Entities
 {
@@ -6348,11 +10429,42 @@ namespace RestaurantMS.Domain.Entities
         public DateTime CreatedDate { get; set; }
         public decimal Subtotal { get; set; }
         public decimal DiscountAmount { get; set; }
-        public decimal TotalAmount { get; set; }
-        public string? PaymentMethod { get; set; }
-        public string Status { get; set; } = string.Empty;
+        public decimal Total { get; set; }
+        public PaymentMethod? PaymentMethod { get; set; }
+        public InvoiceStatus Status { get; set; }
         public DateTime IssuedAt { get; set; }
+        public long? CashierId { get; set; }
+        public DateTime? PaidAt { get; set; }
         public Review? Review { get; set; }
+
+        // Factory enforces: invoice only for COMPLETED orders
+        public static Invoice Create(RestaurantOrder order, decimal subtotal)
+        {
+            if (!order.CanCreateInvoice())
+                throw new InvoiceRequiresCompletedOrderException();
+            return new Invoice { OrderId = order.OrderId, Subtotal = subtotal,
+                Total = subtotal, Status = InvoiceStatus.UNPAID };
+        }
+
+        public void ApplyDiscount(decimal discountAmount)
+        {
+            if (Status != InvoiceStatus.UNPAID)
+                throw new DomainException("Discount can only be applied to UNPAID invoice.");
+            DiscountAmount = discountAmount;
+            Total = Math.Max(0, Subtotal - discountAmount);
+        }
+
+        public void MarkPaid(PaymentMethod method, long cashierId)
+        {
+            if (Status != InvoiceStatus.UNPAID)
+                throw new DomainException("Invoice is already paid or refunded.");
+            Status = InvoiceStatus.PAID;
+            PaymentMethod = method;
+            CashierId = cashierId;
+            PaidAt = DateTime.UtcNow;
+        }
+
+        public bool CanBeReviewed() => Status == InvoiceStatus.PAID;
     }
 }
 
@@ -6407,6 +10519,9 @@ namespace RestaurantMS.Domain.Entities
 using System;
 using System.Collections.Generic;
 
+using RestaurantMS.Domain.Exceptions;
+using RestaurantMS.Domain.Enums;
+
 namespace RestaurantMS.Domain.Entities
 {
     public class Receipt
@@ -6420,6 +10535,18 @@ namespace RestaurantMS.Domain.Entities
         public decimal TotalAmount { get; set; }
         public string? Notes { get; set; }
         public ICollection<ReceiptDetail> ReceiptDetails { get; set; } = new List<ReceiptDetail>();
+
+        // Called before inserting each receipt detail line
+        public static void ValidateItem(FB fb, long receiptManufacturerId)
+        {
+            if (fb.Type == FBType.INHOUSE)
+                throw new InhouseCannotBeImportedException(fb.Name);
+
+            // All items in one receipt must share the same manufacturer
+            if (fb.ManufacturerId.HasValue && fb.ManufacturerId.Value != receiptManufacturerId)
+                throw new DomainException(
+                    $"'{fb.Name}' belongs to a different manufacturer than this receipt.");
+        }
     }
 }
 
@@ -6452,6 +10579,9 @@ namespace RestaurantMS.Domain.Entities
 using System;
 using System.Collections.Generic;
 
+using RestaurantMS.Domain.Exceptions;
+using RestaurantMS.Domain.Enums;
+
 namespace RestaurantMS.Domain.Entities
 {
     public class RestaurantOrder
@@ -6461,11 +10591,38 @@ namespace RestaurantMS.Domain.Entities
         public TableReservation? Reservation { get; set; }
         public int TableId { get; set; }
         public RestaurantTable Table { get; set; } = null!;
-        public string Status { get; set; } = string.Empty;
+        public long? CustomerId { get; set; }
+        public OrderStatus Status { get; set; }
         public string? Notes { get; set; }
         public DateTime CreatedAt { get; set; }
         public Invoice? Invoice { get; set; }
         public ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
+
+        public bool CanAddItem() =>
+            Status == OrderStatus.PENDING || Status == OrderStatus.SERVING;
+
+        public bool CanCreateInvoice() => Status == OrderStatus.COMPLETED;
+
+        public void StartServing()
+        {
+            if (Status != OrderStatus.PENDING)
+                throw new DomainException("Only PENDING orders can move to SERVING.");
+            Status = OrderStatus.SERVING;
+        }
+
+        public void Complete()
+        {
+            if (Status != OrderStatus.SERVING)
+                throw new DomainException("Only SERVING orders can be completed.");
+            Status = OrderStatus.COMPLETED;
+        }
+
+        public void Cancel()
+        {
+            if (Status == OrderStatus.COMPLETED)
+                throw new DomainException("Completed orders cannot be cancelled.");
+            Status = OrderStatus.CANCELLED;
+        }
     }
 }
 
@@ -6476,6 +10633,9 @@ namespace RestaurantMS.Domain.Entities
 using System;
 using System.Collections.Generic;
 
+using RestaurantMS.Domain.Exceptions;
+using RestaurantMS.Domain.Enums;
+
 namespace RestaurantMS.Domain.Entities
 {
     public class RestaurantTable
@@ -6484,9 +10644,19 @@ namespace RestaurantMS.Domain.Entities
         public string TableNumber { get; set; } = string.Empty;
         public int Capacity { get; set; }
         public string? Location { get; set; }
-        public string Status { get; set; } = string.Empty;
+        public TableStatus Status { get; set; }
         public ICollection<RestaurantOrder> Orders { get; set; } = new List<RestaurantOrder>();
         public ICollection<TableReservation> TableReservations { get; set; } = new List<TableReservation>();
+
+        public void Reserve()
+        {
+            if (Status != TableStatus.AVAILABLE)
+                throw new TableNotAvailableException(TableId);
+            Status = TableStatus.RESERVED;
+        }
+        public void SetOccupied()  => Status = TableStatus.OCCUPIED;
+        public void Free()         => Status = TableStatus.AVAILABLE;
+        public void SetMaintenance() => Status = TableStatus.MAINTENANCE;
     }
 }
 
@@ -6497,6 +10667,8 @@ namespace RestaurantMS.Domain.Entities
 using System;
 using System.Collections.Generic;
 
+using RestaurantMS.Domain.Exceptions;
+
 namespace RestaurantMS.Domain.Entities
 {
     public class Review
@@ -6506,10 +10678,23 @@ namespace RestaurantMS.Domain.Entities
         public Invoice Invoice { get; set; } = null!;
         public long CustomerId { get; set; }
         public Customer Customer { get; set; } = null!;
+        public int Stars { get; set; }
         public byte Rating { get; set; }
         public string? Content { get; set; }
         public DateTime CreatedAt { get; set; }
         public ICollection<ReviewReply> Replies { get; set; } = new List<ReviewReply>();
+
+        public static Review Create(Invoice invoice, long customerId, int stars, string content)
+        {
+            if (!invoice.CanBeReviewed())
+                throw new ReviewRequiresPaidInvoiceException();
+            if (stars < 1 || stars > 5)
+                throw new DomainException("Stars must be between 1 and 5.");
+            if (string.IsNullOrWhiteSpace(content))
+                throw new DomainException("Review content cannot be empty.");
+            return new Review { InvoiceId = invoice.InvoiceId, CustomerId = customerId,
+                Stars = stars, Content = content, CreatedAt = DateTime.UtcNow };
+        }
     }
 }
 
@@ -6548,6 +10733,7 @@ namespace RestaurantMS.Domain.Entities
         public long StaffId { get; set; }
         public string FullName { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
         public string? Phone { get; set; }
         public string Role { get; set; } = string.Empty;
         public string? Department { get; set; }
@@ -6567,6 +10753,8 @@ namespace RestaurantMS.Domain.Entities
 using System;
 using System.Collections.Generic;
 
+using RestaurantMS.Domain.Enums;
+
 namespace RestaurantMS.Domain.Entities
 {
     public class TableReservation
@@ -6578,7 +10766,7 @@ namespace RestaurantMS.Domain.Entities
         public RestaurantTable Table { get; set; } = null!;
         public DateTime ReservedAt { get; set; }
         public int GuestCount { get; set; }
-        public string Status { get; set; } = string.Empty;
+        public ReservationStatus Status { get; set; }
         public string? Notes { get; set; }
         public DateTime CreatedAt { get; set; }
         public ICollection<RestaurantOrder> Orders { get; set; } = new List<RestaurantOrder>();
@@ -6592,6 +10780,9 @@ namespace RestaurantMS.Domain.Entities
 using System;
 using System.Collections.Generic;
 
+using RestaurantMS.Domain.Exceptions;
+using RestaurantMS.Domain.Enums;
+
 namespace RestaurantMS.Domain.Entities
 {
     public class Warehouse
@@ -6600,6 +10791,49 @@ namespace RestaurantMS.Domain.Entities
         public FB FB { get; set; } = null!;
         public int CurrentStock { get; set; }
         public DateTime LastUpdated { get; set; }
+        public FBType FBType { get; set; }
+        public int Quantity { get; set; }
+        public int LowStockThreshold { get; set; }
+
+        // Called when OrderItem is created â€” REGULAR enforced strictly
+        public void DeductStock(int amount, string fbName)
+        {
+            if (amount <= 0) throw new DomainException("Amount must be positive.");
+            if (FBType == FBType.REGULAR && Quantity - amount < 0)
+                throw new StockCannotGoNegativeException(fbName, Quantity, amount);
+            Quantity -= amount;
+        }
+
+        // Called when OrderItem is removed or Order is cancelled
+        public void RestoreStock(int amount)
+        {
+            if (amount <= 0) throw new DomainException("Amount must be positive.");
+            Quantity += amount;
+        }
+
+        // Called by Receipt handler â€” adds stock after import
+        public void AddStock(int amount)
+        {
+            if (amount <= 0) throw new DomainException("Import amount must be positive.");
+            Quantity += amount;
+        }
+
+        // Staff-only: INHOUSE (kitchen output) or FRESH_RAW (spoilage). REGULAR is FORBIDDEN.
+        public void AdjustStock(int newQuantity, string fbName)
+        {
+            if (FBType == FBType.REGULAR)
+                throw new DomainException($"REGULAR stock for '{fbName}' cannot be adjusted manually.");
+            if (newQuantity < 0)
+                throw new DomainException("Stock quantity cannot be negative.");
+            Quantity = newQuantity;
+        }
+
+        public StockStatus GetStockStatus()
+        {
+            if (Quantity == 0) return StockStatus.OUT_OF_STOCK;
+            if (Quantity <= LowStockThreshold) return StockStatus.LOW_STOCK;
+            return StockStatus.NORMAL;
+        }
     }
 }
 
@@ -6613,6 +10847,19 @@ public enum DiscountType
 {
     Percent,
     Fixed
+}
+
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Domain\Enums\FBType.cs
+`$language
+namespace RestaurantMS.Domain.Enums;
+
+public enum FBType
+{
+    REGULAR,
+    INHOUSE,
+    FRESH_RAW
 }
 
 ``n
@@ -6636,8 +10883,9 @@ namespace RestaurantMS.Domain.Enums;
 
 public enum InvoiceStatus
 {
-    None = 0,
-    Active = 1
+    UNPAID,
+    PAID,
+    REFUNDED
 }
 
 
@@ -6662,8 +10910,10 @@ namespace RestaurantMS.Domain.Enums;
 
 public enum OrderStatus
 {
-    None = 0,
-    Active = 1
+    PENDING,
+    SERVING,
+    COMPLETED,
+    CANCELLED
 }
 
 
@@ -6675,8 +10925,10 @@ namespace RestaurantMS.Domain.Enums;
 
 public enum PaymentMethod
 {
-    None = 0,
-    Active = 1
+    CASH = 0,
+    CARD = 1,
+    QR = 2,
+    TRANSFER = 3
 }
 
 
@@ -6714,11 +10966,12 @@ namespace RestaurantMS.Domain.Enums;
 
 public enum ReservationStatus
 {
-    None = 0,
-    Active = 1
+    PENDING = 0,
+    CONFIRMED = 1,
+    COMPLETED = 2,
+    CANCELLED = 3,
+    NO_SHOW = 4
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Domain\Enums\Role.cs
@@ -6767,9 +11020,9 @@ namespace RestaurantMS.Domain.Enums;
 
 public enum StockStatus
 {
-    InStock,
-    LowStock,
-    OutOfStock
+    NORMAL,
+    LOW_STOCK,
+    OUT_OF_STOCK
 }
 
 ``n
@@ -6780,8 +11033,10 @@ namespace RestaurantMS.Domain.Enums;
 
 public enum TableStatus
 {
-    None = 0,
-    Active = 1
+    AVAILABLE,
+    RESERVED,
+    OCCUPIED,
+    MAINTENANCE
 }
 
 
@@ -6803,15 +11058,15 @@ public class ConcurrencyDomainException : Exception
 
 ## File: RestaurantMS\src\RestaurantMS.Domain\Exceptions\DomainException.cs
 `$language
-namespace RestaurantMS.Domain.Exceptions;
+using System;
 
-public class DomainException : Exception
+namespace RestaurantMS.Domain.Exceptions
 {
-    public DomainException(string message) : base(message)
+    public class DomainException : Exception
     {
+        public DomainException(string message) : base(message) { }
     }
 }
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Domain\Exceptions\DuplicateRecordDomainException.cs
@@ -6826,6 +11081,34 @@ public class DuplicateRecordDomainException : Exception
 }
 
 
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Domain\Exceptions\FreshRawCannotBeSoldException.cs
+`$language
+using System;
+
+namespace RestaurantMS.Domain.Exceptions
+{
+    public class FreshRawCannotBeSoldException : DomainException
+    {
+        public FreshRawCannotBeSoldException(string name)
+            : base($"'{name}' is a raw ingredient and cannot be sold.") { }
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Domain\Exceptions\InhouseCannotBeImportedException.cs
+`$language
+using System;
+
+namespace RestaurantMS.Domain.Exceptions
+{
+    public class InhouseCannotBeImportedException : DomainException
+    {
+        public InhouseCannotBeImportedException(string name)
+            : base($"'{name}' is an in-house item and cannot be imported.") { }
+    }
+}
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Domain\Exceptions\InhouseNotImportableException.cs
@@ -6870,6 +11153,20 @@ public class InvalidPaymentDomainException : Exception
 
 ``n
 
+## File: RestaurantMS\src\RestaurantMS.Domain\Exceptions\InvoiceRequiresCompletedOrderException.cs
+`$language
+using System;
+
+namespace RestaurantMS.Domain.Exceptions
+{
+    public class InvoiceRequiresCompletedOrderException : DomainException
+    {
+        public InvoiceRequiresCompletedOrderException()
+            : base("An invoice can only be created for a completed order.") { }
+    }
+}
+``n
+
 ## File: RestaurantMS\src\RestaurantMS.Domain\Exceptions\ItemNotSellableException.cs
 `$language
 namespace RestaurantMS.Domain.Exceptions;
@@ -6912,6 +11209,20 @@ public class NotFoundDomainException : Exception
 
 ``n
 
+## File: RestaurantMS\src\RestaurantMS.Domain\Exceptions\NotFoundException.cs
+`$language
+using System;
+
+namespace RestaurantMS.Domain.Exceptions
+{
+    public class NotFoundException : DomainException
+    {
+        public NotFoundException(string entityName, object key)
+            : base($"{entityName} ({key}) was not found.") { }
+    }
+}
+``n
+
 ## File: RestaurantMS\src\RestaurantMS.Domain\Exceptions\OutOfStockDomainException.cs
 `$language
 using System;
@@ -6952,6 +11263,48 @@ public class RegularNotAdjustableException : DomainException
     }
 }
 
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Domain\Exceptions\ReviewRequiresPaidInvoiceException.cs
+`$language
+using System;
+
+namespace RestaurantMS.Domain.Exceptions
+{
+    public class ReviewRequiresPaidInvoiceException : DomainException
+    {
+        public ReviewRequiresPaidInvoiceException()
+            : base("A review can only be submitted after the invoice is paid.") { }
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Domain\Exceptions\StockCannotGoNegativeException.cs
+`$language
+using System;
+
+namespace RestaurantMS.Domain.Exceptions
+{
+    public class StockCannotGoNegativeException : DomainException
+    {
+        public StockCannotGoNegativeException(string name, int available, int requested)
+            : base($"Insufficient stock for '{name}': available={available}, requested={requested}.") { }
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Domain\Exceptions\TableNotAvailableException.cs
+`$language
+using System;
+
+namespace RestaurantMS.Domain.Exceptions
+{
+    public class TableNotAvailableException : DomainException
+    {
+        public TableNotAvailableException(long tableId)
+            : base($"Table {tableId} is not available for reservation.") { }
+    }
+}
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Domain\Exceptions\TableUnavailableDomainException.cs
@@ -7018,28 +11371,134 @@ public static class WarehouseDomainService
 
 ``n
 
+## File: RestaurantMS\src\RestaurantMS.Domain.UnitTests\EntityInvariantTests.cs
+`$language
+using System;
+using Xunit;
+using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
+using RestaurantMS.Domain.Exceptions;
+
+namespace RestaurantMS.Domain.UnitTests
+{
+    public class EntityInvariantTests
+    {
+        [Fact]
+        public void FB_SetVisibility_ThrowsIfFreshRaw()
+        {
+            var fb = new FB { Type = FBType.FRESH_RAW, Name = "Raw Meat" };
+            Assert.Throws<DomainException>(() => fb.SetVisibility(true));
+        }
+
+        [Fact]
+        public void FB_IsSellable_ReturnsFalseForFreshRaw()
+        {
+            var fb = new FB { Type = FBType.FRESH_RAW, IsVisible = true };
+            Assert.False(fb.IsSellable());
+        }
+
+        [Fact]
+        public void Warehouse_DeductStock_ThrowsIfRegularGoesNegative()
+        {
+            var warehouse = new Warehouse { FBType = FBType.REGULAR, Quantity = 5 };
+            Assert.Throws<StockCannotGoNegativeException>(() => warehouse.DeductStock(10, "Burger"));
+        }
+
+        [Fact]
+        public void Warehouse_AdjustStock_ThrowsIfRegular()
+        {
+            var warehouse = new Warehouse { FBType = FBType.REGULAR };
+            Assert.Throws<DomainException>(() => warehouse.AdjustStock(10, "Burger"));
+        }
+
+        [Fact]
+        public void RestaurantOrder_StartServing_ThrowsIfNotPending()
+        {
+            var order = new RestaurantOrder { Status = OrderStatus.SERVING };
+            Assert.Throws<DomainException>(() => order.StartServing());
+        }
+
+        [Fact]
+        public void RestaurantOrder_Complete_ThrowsIfNotServing()
+        {
+            var order = new RestaurantOrder { Status = OrderStatus.PENDING };
+            Assert.Throws<DomainException>(() => order.Complete());
+        }
+
+        [Fact]
+        public void Invoice_Create_ThrowsIfOrderNotCompleted()
+        {
+            var order = new RestaurantOrder { Status = OrderStatus.SERVING };
+            Assert.Throws<InvoiceRequiresCompletedOrderException>(() => Invoice.Create(order, 100));
+        }
+
+        [Fact]
+        public void Review_Create_ThrowsIfInvoiceNotPaid()
+        {
+            var invoice = new Invoice { Status = InvoiceStatus.UNPAID };
+            Assert.Throws<ReviewRequiresPaidInvoiceException>(() => Review.Create(invoice, 1, 5, "Great!"));
+        }
+
+        [Fact]
+        public void Receipt_ValidateItem_ThrowsIfInhouse()
+        {
+            var fb = new FB { Type = FBType.INHOUSE, Name = "Homemade Sauce" };
+            Assert.Throws<InhouseCannotBeImportedException>(() => Receipt.ValidateItem(fb, 1));
+        }
+
+        [Fact]
+        public void RestaurantTable_Reserve_ThrowsIfNotAvailable()
+        {
+            var table = new RestaurantTable { Status = TableStatus.OCCUPIED };
+            Assert.Throws<TableNotAvailableException>(() => table.Reserve());
+        }
+    }
+}
+
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Domain.UnitTests\UnitTest1.cs
+`$language
+namespace RestaurantMS.Domain.UnitTests;
+
+public class UnitTest1
+{
+    [Fact]
+    public void Test1()
+    {
+
+    }
+}
+``n
+
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\DependencyInjection.cs
 `$language
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using RestaurantMS.Application.Common.Interfaces;
 using RestaurantMS.Infrastructure.Identity;
-using RestaurantMS.Infrastructure.Persistence;
+using RestaurantMS.Infrastructure.Data;
+using RestaurantMS.Infrastructure.Repositories;
+using RestaurantMS.Infrastructure.Services;
 
 namespace RestaurantMS.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
     {
-        services.AddDbContext<AppDbContext>(options =>
-            options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
+        services.AddSingleton<SqlConnectionFactory>(); // shared, thread-safe
 
-        services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<AppDbContext>());
-        
-        services.AddScoped<IPasswordHasher, PasswordHasher>();
+        // UnitOfWork: Scoped â€” one per HTTP request, wraps all 16 repos
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        // Application-layer service implementations
         services.AddScoped<IJwtTokenService, JwtTokenService>();
+        services.AddScoped<IPasswordHasher,  PasswordHasher>();
+        services.AddScoped<IDateTimeService, DateTimeService>();
+
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentUserService, CurrentUserService>();
 
         return services;
     }
@@ -7047,65 +11506,30 @@ public static class DependencyInjection
 
 ``n
 
-## File: RestaurantMS\src\RestaurantMS.Infrastructure\Data\IUnitOfWork.cs
-`$language
-using System;
-using Microsoft.Data.SqlClient;
-
-namespace RestaurantMS.Infrastructure.Data;
-
-public interface IUnitOfWork : IDisposable
-{
-    SqlTransaction BeginTransaction();
-    void Commit();
-    void Rollback();
-}
-
-
-``n
-
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\Data\SqlConnectionFactory.cs
 `$language
-using Microsoft.Data.SqlClient;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
-
-namespace RestaurantMS.Infrastructure.Data;
-
-public class SqlConnectionFactory
-{
-    private readonly string _connectionString;
-    public SqlConnectionFactory(IConfiguration configuration)
-    {
-        _connectionString = configuration.GetConnectionString("DefaultConnection");
-    }
-    public SqlConnection CreateConnection() => new SqlConnection(_connectionString);
-}
-
-
-``n
-
-## File: RestaurantMS\src\RestaurantMS.Infrastructure\Data\UnitOfWork.cs
-`$language
 using System;
 using Microsoft.Data.SqlClient;
 
-namespace RestaurantMS.Infrastructure.Data;
-
-public class UnitOfWork : IUnitOfWork
+namespace RestaurantMS.Infrastructure.Data
 {
-    private readonly SqlConnection _connection;
-    private SqlTransaction _transaction;
-    public UnitOfWork(SqlConnectionFactory factory)
+    public class SqlConnectionFactory
     {
-        _connection = factory.CreateConnection();
-        _connection.Open();
-    }
-    public SqlTransaction BeginTransaction() { _transaction = _connection.BeginTransaction(); return _transaction; }
-    public void Commit() { _transaction?.Commit(); }
-    public void Rollback() { _transaction?.Rollback(); }
-    public void Dispose() { _transaction?.Dispose(); _connection?.Dispose(); }
-}
+        private readonly string _cs;
+        public SqlConnectionFactory(IConfiguration config)
+            => _cs = config.GetConnectionString("DefaultConnection")
+                ?? throw new InvalidOperationException("DefaultConnection not configured.");
 
+        public async Task<SqlConnection> CreateConnectionAsync()
+        {
+            var conn = new SqlConnection(_cs);
+            await conn.OpenAsync();
+            return conn;
+        }
+    }
+}
 
 ``n
 
@@ -7141,7 +11565,32 @@ public class JwtTokenService : IJwtTokenService
             new Claim(ClaimTypes.NameIdentifier, customer.CustomerId.ToString()),
             new Claim(ClaimTypes.Name, customer.FullName),
             new Claim(ClaimTypes.MobilePhone, customer.Phone),
-            new Claim(ClaimTypes.Role, "Customer")
+            new Claim(ClaimTypes.Role, "CUSTOMER")
+        };
+
+        var token = new JwtSecurityToken(
+            issuer: _configuration["Jwt:Issuer"],
+            audience: _configuration["Jwt:Audience"],
+            claims: claims,
+            expires: DateTime.Now.AddDays(7),
+            signingCredentials: creds
+        );
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    public string GenerateStaffToken(Staff staff)
+    {
+        var secretKey = _configuration["Jwt:Key"] ?? "a_very_long_and_secure_secret_key_for_development";
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+        var claims = new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, staff.StaffId.ToString()),
+            new Claim(ClaimTypes.Name, staff.FullName),
+            new Claim(ClaimTypes.Email, staff.Email),
+            new Claim(ClaimTypes.Role, staff.Role) // Assume string role like "MANAGER" or "ADMIN"
         };
 
         var token = new JwtSecurityToken(
@@ -7183,12 +11632,11 @@ public class PasswordHasher : IPasswordHasher
 `$language
 using Microsoft.EntityFrameworkCore;
 using System.Reflection;
-using RestaurantMS.Application.Common.Interfaces;
 using RestaurantMS.Domain.Entities;
 
 namespace RestaurantMS.Infrastructure.Persistence;
 
-public class AppDbContext : DbContext, IApplicationDbContext
+public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -7248,6 +11696,37 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
 
 ``n
 
+## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\BaseRepository.cs
+`$language
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories;
+
+public abstract class BaseRepository
+{
+    protected readonly SqlConnectionFactory _factory;
+    protected readonly UnitOfWork _uow;
+
+    protected BaseRepository(SqlConnectionFactory factory, UnitOfWork uow)
+    {
+        _factory = factory;
+        _uow = uow;
+    }
+
+    protected async Task<(SqlConnection conn, SqlTransaction? tx, bool owned)> GetConnAsync()
+    {
+        if (_uow.ActiveConnection != null)
+            return (_uow.ActiveConnection, _uow.ActiveTransaction, false);
+
+        var conn = await _factory.CreateConnectionAsync();
+        return (conn, null, true);
+    }
+}
+
+``n
+
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\CategoryRepository.cs
 `$language
 using System.Collections.Generic;
@@ -7259,23 +11738,46 @@ using RestaurantMS.Infrastructure.Data;
 
 namespace RestaurantMS.Infrastructure.Repositories;
 
-public class CategoryRepository : ICategoryRepository
+public class CategoryRepository : BaseRepository, ICategoryRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
-    public CategoryRepository(SqlConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
-    public async Task<Category> GetByIdAsync(long id) { return null; }
-    public async Task<IEnumerable<Category>> GetAllAsync() { return new List<Category>(); }
-    public async Task AddAsync(Category entity) {}
+    public CategoryRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<Category?> GetByIdAsync(long id)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Categories WHERE category_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) return new Category { CategoryId = (int)r.GetInt64(0), Name = r.GetString(1), Type = r.GetString(2) };
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task<IEnumerable<Category>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Categories ORDER BY name";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<Category>();
+            while (await r.ReadAsync()) list.Add(new Category { CategoryId = (int)r.GetInt64(0), Name = r.GetString(1), Type = r.GetString(2) });
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task AddAsync(Category entity) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "INSERT INTO Categories (name, type) VALUES (@Name, @Type)";
+            cmd.Parameters.AddWithValue("@Name", entity.Name);
+            cmd.Parameters.AddWithValue("@Type", entity.Type ?? "FOOD");
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
     public async Task UpdateAsync(Category entity) {}
     public async Task DeleteAsync(long id) {}
-
-    private Category MapCategory(SqlDataReader reader)
-    {
-        return new Category();
-    }
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\CustomerRepository.cs
@@ -7289,27 +11791,57 @@ using RestaurantMS.Infrastructure.Data;
 
 namespace RestaurantMS.Infrastructure.Repositories;
 
-public class CustomerRepository : ICustomerRepository
+public class CustomerRepository : BaseRepository, ICustomerRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
-    public CustomerRepository(SqlConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
-    public async Task<Customer> GetByIdAsync(long id) { return null; }
+    public CustomerRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<Customer?> GetByIdAsync(long id) { return null; }
     public async Task<IEnumerable<Customer>> GetAllAsync() { return new List<Customer>(); }
     public async Task AddAsync(Customer entity) {}
     public async Task UpdateAsync(Customer entity) {}
     public async Task DeleteAsync(long id) {}
-
-    private Customer MapCustomer(SqlDataReader reader)
+    
+    public async Task<Customer?> GetByPhoneAsync(string phone)
     {
-        return new Customer();
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Customers WHERE phone = @Phone";
+            cmd.Parameters.AddWithValue("@Phone", phone);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) {
+                return new Customer {
+                    CustomerId = r.GetInt64(r.GetOrdinal("customer_id")),
+                    FullName = r.GetString(r.GetOrdinal("full_name")),
+                    Phone = r.GetString(r.GetOrdinal("phone")),
+                    Password = r.GetString(r.GetOrdinal("password"))
+                };
+            }
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    
+    public async Task UpdateLoyaltyPointsAsync(long customerId, int points) {}
+    public async Task<long> InsertAndReturnIdAsync(Customer entity)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO Customers (phone, full_name, email, password, membership_level, loyalty_points, created_at)
+                               OUTPUT INSERTED.customer_id VALUES (@Phone, @Name, @Email, @Pass, 'NORMAL', 0, GETUTCDATE())";
+            cmd.Parameters.AddWithValue("@Phone", entity.Phone);
+            cmd.Parameters.AddWithValue("@Name", entity.FullName);
+            cmd.Parameters.AddWithValue("@Email", (object?)entity.Email ?? System.DBNull.Value);
+            cmd.Parameters.AddWithValue("@Pass", entity.Password);
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
     }
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\DiscountCodeRepository.cs
 `$language
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
@@ -7319,87 +11851,318 @@ using RestaurantMS.Infrastructure.Data;
 
 namespace RestaurantMS.Infrastructure.Repositories;
 
-public class DiscountCodeRepository : IDiscountCodeRepository
+public class DiscountCodeRepository : BaseRepository, IDiscountCodeRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
-    public DiscountCodeRepository(SqlConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
-    public async Task<DiscountCode> GetByIdAsync(long id) { return null; }
-    public async Task<IEnumerable<DiscountCode>> GetAllAsync() { return new List<DiscountCode>(); }
-    public async Task AddAsync(DiscountCode entity) {}
-    public async Task UpdateAsync(DiscountCode entity) {}
-    public async Task DeleteAsync(long id) {}
+    public DiscountCodeRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
 
-    private DiscountCode MapDiscountCode(SqlDataReader reader)
+    public async Task<DiscountCode?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<DiscountCode>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM DiscountCodes";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<DiscountCode>();
+            while (await r.ReadAsync()) {
+                list.Add(new DiscountCode {
+                    DiscountCodeId = (int)r.GetInt64(r.GetOrdinal("discount_code_id")),
+                    Code = r.GetString(r.GetOrdinal("code")),
+                    DiscountType = r.GetString(r.GetOrdinal("discount_type")),
+                    DiscountValue = r.GetDecimal(r.GetOrdinal("discount_value")),
+                    MinOrderAmount = r.IsDBNull(r.GetOrdinal("min_order_amount")) ? null : r.GetDecimal(r.GetOrdinal("min_order_amount")),
+                    MaxDiscountAmount = r.IsDBNull(r.GetOrdinal("max_discount_amount")) ? null : r.GetDecimal(r.GetOrdinal("max_discount_amount")),
+                    ValidFrom = r.GetDateTime(r.GetOrdinal("valid_from")),
+                    ValidTo = r.GetDateTime(r.GetOrdinal("valid_to")),
+                    UsageLimit = r.IsDBNull(r.GetOrdinal("usage_limit")) ? null : r.GetInt32(r.GetOrdinal("usage_limit")),
+                    UsedCount = r.GetInt32(r.GetOrdinal("used_count")),
+                    IsActive = r.GetBoolean(r.GetOrdinal("is_active"))
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task AddAsync(DiscountCode entity) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO DiscountCodes (code, discount_type, discount_value, min_order_amount,
+                max_discount_amount, valid_from, valid_to, usage_limit, used_count, is_active)
+            VALUES (@Code,@Type,@Val,@Min,@Max,@From,@To,@Limit,0,1)";
+            cmd.Parameters.AddWithValue("@Code",  entity.Code);
+            cmd.Parameters.AddWithValue("@Type",  entity.DiscountType);
+            cmd.Parameters.AddWithValue("@Val",   entity.DiscountValue);
+            cmd.Parameters.AddWithValue("@Min",   (object?)entity.MinOrderAmount    ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@Max",   (object?)entity.MaxDiscountAmount ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@From",  entity.ValidFrom);
+            cmd.Parameters.AddWithValue("@To",    entity.ValidTo);
+            cmd.Parameters.AddWithValue("@Limit", (object?)entity.UsageLimit        ?? DBNull.Value);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task UpdateAsync(DiscountCode entity) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "UPDATE DiscountCodes SET is_active = @Active WHERE discount_code_id = @Id";
+            cmd.Parameters.AddWithValue("@Active", entity.IsActive);
+            cmd.Parameters.AddWithValue("@Id",     entity.DiscountCodeId);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task DeleteAsync(long id) {}
+    
+    public async Task<DiscountCode?> GetByCodeAsync(string code)
     {
-        return new DiscountCode();
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM DiscountCodes WHERE code = @Code";
+            cmd.Parameters.AddWithValue("@Code", code);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) {
+                return new DiscountCode {
+                    DiscountCodeId = (int)r.GetInt64(r.GetOrdinal("discount_code_id")),
+                    Code = r.GetString(r.GetOrdinal("code")),
+                    DiscountType = r.GetString(r.GetOrdinal("discount_type")),
+                    DiscountValue = r.GetDecimal(r.GetOrdinal("discount_value")),
+                    MinOrderAmount = r.IsDBNull(r.GetOrdinal("min_order_amount")) ? null : r.GetDecimal(r.GetOrdinal("min_order_amount")),
+                    MaxDiscountAmount = r.IsDBNull(r.GetOrdinal("max_discount_amount")) ? null : r.GetDecimal(r.GetOrdinal("max_discount_amount")),
+                    ValidFrom = r.GetDateTime(r.GetOrdinal("valid_from")),
+                    ValidTo = r.GetDateTime(r.GetOrdinal("valid_to")),
+                    UsageLimit = r.IsDBNull(r.GetOrdinal("usage_limit")) ? null : r.GetInt32(r.GetOrdinal("usage_limit")),
+                    UsedCount = r.GetInt32(r.GetOrdinal("used_count")),
+                    IsActive = r.GetBoolean(r.GetOrdinal("is_active"))
+                };
+            }
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+
+    public async Task IncrementUsedCountAsync(long discountCodeId)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "UPDATE DiscountCodes SET used_count = used_count + 1 WHERE discount_code_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", discountCodeId);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
     }
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\FBRepository.cs
 `$language
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
 using RestaurantMS.Application.Interfaces;
 using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
 using RestaurantMS.Infrastructure.Data;
 
 namespace RestaurantMS.Infrastructure.Repositories;
 
-public class FBRepository : IFBRepository
+public class FBRepository : BaseRepository, IFBRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
-    public FBRepository(SqlConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
-    public async Task<FB> GetByIdAsync(long id) { return null; }
-    public async Task<IEnumerable<FB>> GetAllAsync() { return new List<FB>(); }
+    public FBRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<FB?> GetByIdAsync(long id)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM FBs WHERE fb_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) {
+                return new FB { 
+                    ItemId = (int)r.GetInt64(0), 
+                    Name = r.GetString(1), 
+                    Price = r.GetDecimal(2), 
+                    Type = Enum.Parse<FBType>(r.GetString(3)),
+                    CategoryId = (int)r.GetInt64(r.GetOrdinal("category_id")),
+                    IsVisible = r.GetBoolean(6),
+                    Unit = r.IsDBNull(r.GetOrdinal("unit")) ? null : r.GetString(r.GetOrdinal("unit"))
+                };
+            }
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task<IEnumerable<FB>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM FBs";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<FB>();
+            while (await r.ReadAsync()) {
+                list.Add(new FB { 
+                    ItemId = (int)r.GetInt64(0), 
+                    Name = r.GetString(1), 
+                    Price = r.GetDecimal(2), 
+                    Type = Enum.Parse<FBType>(r.GetString(3)),
+                    CategoryId = (int)r.GetInt64(r.GetOrdinal("category_id")),
+                    IsVisible = r.GetBoolean(6),
+                    Unit = r.IsDBNull(r.GetOrdinal("unit")) ? null : r.GetString(r.GetOrdinal("unit"))
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
     public async Task AddAsync(FB entity) {}
     public async Task UpdateAsync(FB entity) {}
     public async Task DeleteAsync(long id) {}
-
-    private FB MapFB(SqlDataReader reader)
-    {
-        return new FB();
+    public async Task<IEnumerable<FB>> GetMenuAsync(bool includeInhouse = false) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = includeInhouse
+                ? "SELECT * FROM FBs WHERE type != 'FRESH_RAW' AND is_visible = 1"
+                : "SELECT * FROM FBs WHERE type = 'REGULAR' AND is_visible = 1";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<FB>();
+            while (await r.ReadAsync()) {
+                list.Add(new FB { 
+                    ItemId = (int)r.GetInt64(0), 
+                    Name = r.GetString(1), 
+                    Price = r.GetDecimal(2), 
+                    Type = Enum.Parse<FBType>(r.GetString(3)),
+                    CategoryId = (int)r.GetInt64(r.GetOrdinal("category_id")),
+                    IsVisible = r.GetBoolean(6),
+                    Unit = r.IsDBNull(r.GetOrdinal("unit")) ? null : r.GetString(r.GetOrdinal("unit"))
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
     }
+    public async Task<long> InsertAndReturnIdAsync(FB entity) => 1;
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\InvoiceRepository.cs
 `$language
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
 using RestaurantMS.Application.Interfaces;
 using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
 using RestaurantMS.Infrastructure.Data;
 
 namespace RestaurantMS.Infrastructure.Repositories;
 
-public class InvoiceRepository : IInvoiceRepository
+public class InvoiceRepository : BaseRepository, IInvoiceRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
-    public InvoiceRepository(SqlConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
-    public async Task<Invoice> GetByIdAsync(long id) { return null; }
-    public async Task<IEnumerable<Invoice>> GetAllAsync() { return new List<Invoice>(); }
-    public async Task AddAsync(Invoice entity) {}
-    public async Task UpdateAsync(Invoice entity) {}
-    public async Task DeleteAsync(long id) {}
+    public InvoiceRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
 
-    private Invoice MapInvoice(SqlDataReader reader)
+    public async Task<Invoice?> GetByIdAsync(long id)
     {
-        return new Invoice();
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Invoices WHERE invoice_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) {
+                return new Invoice {
+                    InvoiceId = r.GetInt64(r.GetOrdinal("invoice_id")),
+                    OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                    Subtotal = r.GetDecimal(r.GetOrdinal("subtotal")),
+                    DiscountAmount = r.GetDecimal(r.GetOrdinal("discount_amount")),
+                    Total = r.GetDecimal(r.GetOrdinal("total")),
+                    Status = Enum.Parse<InvoiceStatus>(r.GetString(r.GetOrdinal("status")))
+                };
+            }
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task<IEnumerable<Invoice>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Invoices ORDER BY invoice_id DESC";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<Invoice>();
+            while (await r.ReadAsync()) {
+                list.Add(new Invoice {
+                    InvoiceId = r.GetInt64(r.GetOrdinal("invoice_id")),
+                    OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                    Subtotal = r.GetDecimal(r.GetOrdinal("subtotal")),
+                    DiscountAmount = r.GetDecimal(r.GetOrdinal("discount_amount")),
+                    Total = r.GetDecimal(r.GetOrdinal("total")),
+                    Status = Enum.Parse<InvoiceStatus>(r.GetString(r.GetOrdinal("status")))
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task AddAsync(Invoice entity) {}
+
+    public async Task UpdateAsync(Invoice entity)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"UPDATE Invoices SET subtotal=@Sub, discount_amount=@Disc, total=@Total, 
+                               status=@Status, payment_method=@PM, discount_code_id=@DCId, 
+                               cashier_id=@CId, paid_at=@PaidAt WHERE invoice_id=@Id";
+            cmd.Parameters.AddWithValue("@Sub", entity.Subtotal);
+            cmd.Parameters.AddWithValue("@Disc", entity.DiscountAmount);
+            cmd.Parameters.AddWithValue("@Total", entity.Total);
+            cmd.Parameters.AddWithValue("@Status", entity.Status.ToString());
+            cmd.Parameters.AddWithValue("@PM", (object?)entity.PaymentMethod?.ToString() ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@DCId", (object?)entity.DiscountCodeId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@CId", (object?)entity.CashierId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@PaidAt", (object?)entity.PaidAt ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@Id", entity.InvoiceId);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+
+    public async Task DeleteAsync(long id) {}
+    public async Task<Invoice?> GetByOrderIdAsync(long orderId)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Invoices WHERE order_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", orderId);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) {
+                return new Invoice {
+                    InvoiceId = r.GetInt64(r.GetOrdinal("invoice_id")),
+                    OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                    Status = Enum.Parse<InvoiceStatus>(r.GetString(r.GetOrdinal("status")))
+                };
+            }
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    
+    public async Task<long> InsertAndReturnIdAsync(Invoice invoice)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO Invoices (order_id, subtotal, discount_amount, total, status)
+                               OUTPUT INSERTED.invoice_id VALUES (@OId, @Sub, @Disc, @Total, @Status)";
+            cmd.Parameters.AddWithValue("@OId", invoice.OrderId);
+            cmd.Parameters.AddWithValue("@Sub", invoice.Subtotal);
+            cmd.Parameters.AddWithValue("@Disc", invoice.DiscountAmount);
+            cmd.Parameters.AddWithValue("@Total", invoice.Total);
+            cmd.Parameters.AddWithValue("@Status", invoice.Status.ToString());
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
     }
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\ManufacturerRepository.cs
 `$language
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
@@ -7409,23 +12172,48 @@ using RestaurantMS.Infrastructure.Data;
 
 namespace RestaurantMS.Infrastructure.Repositories;
 
-public class ManufacturerRepository : IManufacturerRepository
+public class ManufacturerRepository : BaseRepository, IManufacturerRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
-    public ManufacturerRepository(SqlConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
-    public async Task<Manufacturer> GetByIdAsync(long id) { return null; }
-    public async Task<IEnumerable<Manufacturer>> GetAllAsync() { return new List<Manufacturer>(); }
+    public ManufacturerRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<Manufacturer?> GetByIdAsync(long id)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Manufacturers WHERE manufacturer_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) return new Manufacturer { ManufacturerId = (int)r.GetInt64(0), Name = r.GetString(1) };
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task<IEnumerable<Manufacturer>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Manufacturers ORDER BY name";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<Manufacturer>();
+            while (await r.ReadAsync()) list.Add(new Manufacturer { ManufacturerId = (int)r.GetInt64(0), Name = r.GetString(1) });
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
     public async Task AddAsync(Manufacturer entity) {}
     public async Task UpdateAsync(Manufacturer entity) {}
     public async Task DeleteAsync(long id) {}
-
-    private Manufacturer MapManufacturer(SqlDataReader reader)
-    {
-        return new Manufacturer();
+    public async Task<long> InsertAndReturnIdAsync(Manufacturer entity) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "INSERT INTO Manufacturers (name, address, phone) OUTPUT INSERTED.manufacturer_id VALUES (@Name, @Addr, @Phone)";
+            cmd.Parameters.AddWithValue("@Name", entity.Name);
+            cmd.Parameters.AddWithValue("@Addr",  (object?)entity.Address ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@Phone", (object?)entity.Phone   ?? DBNull.Value);
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
     }
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\OrderItemRepository.cs
@@ -7439,23 +12227,53 @@ using RestaurantMS.Infrastructure.Data;
 
 namespace RestaurantMS.Infrastructure.Repositories;
 
-public class OrderItemRepository : IOrderItemRepository
+public class OrderItemRepository : BaseRepository, IOrderItemRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
-    public OrderItemRepository(SqlConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
-    public async Task<OrderItem> GetByIdAsync(long id) { return null; }
+    public OrderItemRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<OrderItem?> GetByIdAsync(long id) { return null; }
     public async Task<IEnumerable<OrderItem>> GetAllAsync() { return new List<OrderItem>(); }
     public async Task AddAsync(OrderItem entity) {}
     public async Task UpdateAsync(OrderItem entity) {}
     public async Task DeleteAsync(long id) {}
 
-    private OrderItem MapOrderItem(SqlDataReader reader)
+    public async Task<IEnumerable<OrderItem>> GetByOrderIdAsync(long orderId)
     {
-        return new OrderItem();
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM OrderItems WHERE order_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", orderId);
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<OrderItem>();
+            while (await r.ReadAsync()) {
+                list.Add(new OrderItem {
+                    OrderItemId = r.GetInt64(r.GetOrdinal("order_item_id")),
+                    OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                    ItemId = (int)r.GetInt64(r.GetOrdinal("item_id")),
+                    Quantity = r.GetInt32(r.GetOrdinal("quantity")),
+                    UnitPrice = r.GetDecimal(r.GetOrdinal("unit_price"))
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+
+    public async Task<long> InsertAndReturnIdAsync(OrderItem item)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO OrderItems (order_id, item_id, quantity, unit_price)
+                               OUTPUT INSERTED.order_item_id VALUES (@OId, @IId, @Qty, @Price)";
+            cmd.Parameters.AddWithValue("@OId", item.OrderId);
+            cmd.Parameters.AddWithValue("@IId", item.ItemId);
+            cmd.Parameters.AddWithValue("@Qty", item.Quantity);
+            cmd.Parameters.AddWithValue("@Price", item.UnitPrice);
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
     }
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\ReceiptDetailRepository.cs
@@ -7469,27 +12287,39 @@ using RestaurantMS.Infrastructure.Data;
 
 namespace RestaurantMS.Infrastructure.Repositories;
 
-public class ReceiptDetailRepository : IReceiptDetailRepository
+public class ReceiptDetailRepository : BaseRepository, IReceiptDetailRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
-    public ReceiptDetailRepository(SqlConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
-    public async Task<ReceiptDetail> GetByIdAsync(long id) { return null; }
+    public ReceiptDetailRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<ReceiptDetail?> GetByIdAsync(long id) { return null; }
     public async Task<IEnumerable<ReceiptDetail>> GetAllAsync() { return new List<ReceiptDetail>(); }
     public async Task AddAsync(ReceiptDetail entity) {}
     public async Task UpdateAsync(ReceiptDetail entity) {}
     public async Task DeleteAsync(long id) {}
-
-    private ReceiptDetail MapReceiptDetail(SqlDataReader reader)
+    
+    public async Task<long> InsertAndReturnIdAsync(ReceiptDetail entity)
     {
-        return new ReceiptDetail();
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO ReceiptDetails (receipt_id, item_id, quantity, import_price)
+                               OUTPUT INSERTED.receipt_detail_id VALUES (@RId, @IId, @Qty, @Price)";
+            cmd.Parameters.AddWithValue("@RId", entity.ReceiptId);
+            cmd.Parameters.AddWithValue("@IId", entity.ItemId);
+            cmd.Parameters.AddWithValue("@Qty", entity.Quantity);
+            cmd.Parameters.AddWithValue("@Price", entity.ImportPrice);
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
     }
+
+    public async Task<IEnumerable<ReceiptDetail>> GetByReceiptIdAsync(long receiptId) { return new List<ReceiptDetail>(); }
+    public async Task DeleteByReceiptIdAsync(long receiptId) {}
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\ReceiptRepository.cs
 `$language
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
@@ -7499,117 +12329,325 @@ using RestaurantMS.Infrastructure.Data;
 
 namespace RestaurantMS.Infrastructure.Repositories;
 
-public class ReceiptRepository : IReceiptRepository
+public class ReceiptRepository : BaseRepository, IReceiptRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
-    public ReceiptRepository(SqlConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
-    public async Task<Receipt> GetByIdAsync(long id) { return null; }
+    public ReceiptRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<Receipt?> GetByIdAsync(long id) { return null; }
     public async Task<IEnumerable<Receipt>> GetAllAsync() { return new List<Receipt>(); }
     public async Task AddAsync(Receipt entity) {}
     public async Task UpdateAsync(Receipt entity) {}
     public async Task DeleteAsync(long id) {}
+    
+    public async Task<Receipt?> GetWithDetailsAsync(long receiptId) { return null; }
 
-    private Receipt MapReceipt(SqlDataReader reader)
+    public async Task<long> InsertAndReturnIdAsync(Receipt receipt)
     {
-        return new Receipt();
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO Receipts (manufacturer_id, staff_id, imported_at)
+                               OUTPUT INSERTED.receipt_id VALUES (@MId, @SId, @Date)";
+            cmd.Parameters.AddWithValue("@MId", receipt.ManufacturerId);
+            cmd.Parameters.AddWithValue("@SId", receipt.CreatedBy);
+            cmd.Parameters.AddWithValue("@Date", receipt.ReceiptDate);
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
     }
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\RestaurantOrderRepository.cs
 `$language
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
 using RestaurantMS.Application.Interfaces;
 using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
 using RestaurantMS.Infrastructure.Data;
 
 namespace RestaurantMS.Infrastructure.Repositories;
 
-public class RestaurantOrderRepository : IRestaurantOrderRepository
+public class RestaurantOrderRepository : BaseRepository, IRestaurantOrderRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
-    public RestaurantOrderRepository(SqlConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
-    public async Task<RestaurantOrder> GetByIdAsync(long id) { return null; }
-    public async Task<IEnumerable<RestaurantOrder>> GetAllAsync() { return new List<RestaurantOrder>(); }
+    public RestaurantOrderRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<RestaurantOrder?> GetByIdAsync(long id)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM RestaurantOrders WHERE order_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) {
+                return new RestaurantOrder {
+                    OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                    TableId = (int)r.GetInt64(r.GetOrdinal("table_id")),
+                    Status = Enum.Parse<OrderStatus>(r.GetString(r.GetOrdinal("status"))),
+                    CreatedAt = r.GetDateTime(r.GetOrdinal("created_at"))
+                };
+            }
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task<IEnumerable<RestaurantOrder>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM RestaurantOrders ORDER BY created_at DESC";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<RestaurantOrder>();
+            while (await r.ReadAsync()) {
+                list.Add(new RestaurantOrder {
+                    OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                    TableId = (int)r.GetInt64(r.GetOrdinal("table_id")),
+                    Status = Enum.Parse<OrderStatus>(r.GetString(r.GetOrdinal("status"))),
+                    CreatedAt = r.GetDateTime(r.GetOrdinal("created_at"))
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
     public async Task AddAsync(RestaurantOrder entity) {}
     public async Task UpdateAsync(RestaurantOrder entity) {}
     public async Task DeleteAsync(long id) {}
 
-    private RestaurantOrder MapRestaurantOrder(SqlDataReader reader)
+    public async Task<RestaurantOrder?> GetWithItemsAsync(long orderId)
     {
-        return new RestaurantOrder();
+        var order = await GetByIdAsync(orderId);
+        if (order == null) return null;
+
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM OrderItems WHERE order_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", orderId);
+            await using var r = await cmd.ExecuteReaderAsync();
+            order.OrderItems = new List<OrderItem>();
+            while (await r.ReadAsync())
+            {
+                order.OrderItems.Add(new OrderItem {
+                    OrderItemId = r.GetInt64(r.GetOrdinal("order_item_id")),
+                    OrderId = r.GetInt64(r.GetOrdinal("order_id")),
+                    ItemId = (int)r.GetInt64(r.GetOrdinal("item_id")),
+                    Quantity = r.GetInt32(r.GetOrdinal("quantity")),
+                    UnitPrice = r.GetDecimal(r.GetOrdinal("unit_price"))
+                });
+            }
+            return order;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task<IEnumerable<RestaurantOrder>> GetByTableAsync(long tableId) { return new List<RestaurantOrder>(); }
+    
+    public async Task<long> InsertAndReturnIdAsync(RestaurantOrder order)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO RestaurantOrders (table_id, reservation_id, customer_id, status, created_at)
+                               OUTPUT INSERTED.order_id VALUES (@TId, @ResId, @CId, @Status, @Created)";
+            cmd.Parameters.AddWithValue("@TId", order.TableId);
+            cmd.Parameters.AddWithValue("@ResId", (object?)order.ReservationId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@CId", (object?)order.CustomerId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@Status", order.Status.ToString());
+            cmd.Parameters.AddWithValue("@Created", order.CreatedAt);
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    
+    public async Task UpdateStatusAsync(long orderId, OrderStatus status)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "UPDATE RestaurantOrders SET status = @Status WHERE order_id = @Id";
+            cmd.Parameters.AddWithValue("@Status", status.ToString());
+            cmd.Parameters.AddWithValue("@Id", orderId);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
     }
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\RestaurantTableRepository.cs
 `$language
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
 using RestaurantMS.Application.Interfaces;
 using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
 using RestaurantMS.Infrastructure.Data;
 
 namespace RestaurantMS.Infrastructure.Repositories;
 
-public class RestaurantTableRepository : IRestaurantTableRepository
+public class RestaurantTableRepository : BaseRepository, IRestaurantTableRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
-    public RestaurantTableRepository(SqlConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
-    public async Task<RestaurantTable> GetByIdAsync(long id) { return null; }
-    public async Task<IEnumerable<RestaurantTable>> GetAllAsync() { return new List<RestaurantTable>(); }
-    public async Task AddAsync(RestaurantTable entity) {}
-    public async Task UpdateAsync(RestaurantTable entity) {}
-    public async Task DeleteAsync(long id) {}
+    public RestaurantTableRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
 
-    private RestaurantTable MapRestaurantTable(SqlDataReader reader)
+    public async Task<RestaurantTable?> GetByIdAsync(long id)
     {
-        return new RestaurantTable();
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM RestaurantTables WHERE table_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (!await r.ReadAsync()) return null;
+            return new RestaurantTable {
+                TableId = (int)r.GetInt64(r.GetOrdinal("table_id")),
+                Status = Enum.Parse<TableStatus>(r.GetString(r.GetOrdinal("status"))),
+                Capacity = r.GetInt32(r.GetOrdinal("capacity"))
+            };
+        } finally { if (owned) await conn.DisposeAsync(); }
     }
+    public async Task<IEnumerable<RestaurantTable>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM RestaurantTables ORDER BY table_id";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<RestaurantTable>();
+            while (await r.ReadAsync()) {
+                list.Add(new RestaurantTable {
+                    TableId = (int)r.GetInt64(r.GetOrdinal("table_id")),
+                    Status = Enum.Parse<TableStatus>(r.GetString(r.GetOrdinal("status"))),
+                    Capacity = r.GetInt32(r.GetOrdinal("capacity"))
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task AddAsync(RestaurantTable entity) {}
+    public async Task UpdateAsync(RestaurantTable entity) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "UPDATE RestaurantTables SET status = @Status WHERE table_id = @Id";
+            cmd.Parameters.AddWithValue("@Status", entity.Status.ToString());
+            cmd.Parameters.AddWithValue("@Id", entity.TableId);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task DeleteAsync(long id) {}
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\ReviewReplyRepository.cs
 `$language
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
 using RestaurantMS.Application.Interfaces;
 using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
 using RestaurantMS.Infrastructure.Data;
 
 namespace RestaurantMS.Infrastructure.Repositories;
 
-public class ReviewReplyRepository : IReviewReplyRepository
+public class ReviewReplyRepository : BaseRepository, IReviewReplyRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
-    public ReviewReplyRepository(SqlConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
-    public async Task<ReviewReply> GetByIdAsync(long id) { return null; }
-    public async Task<IEnumerable<ReviewReply>> GetAllAsync() { return new List<ReviewReply>(); }
-    public async Task AddAsync(ReviewReply entity) {}
-    public async Task UpdateAsync(ReviewReply entity) {}
-    public async Task DeleteAsync(long id) {}
+    public ReviewReplyRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
 
-    private ReviewReply MapReviewReply(SqlDataReader reader)
+    public async Task<ReviewReply?> GetByIdAsync(long id)
     {
-        return new ReviewReply();
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM ReviewReplies WHERE reply_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            await using var r = await cmd.ExecuteReaderAsync();
+            return await r.ReadAsync() ? MapReply(r) : null;
+        } finally { if (owned) await conn.DisposeAsync(); }
     }
-}
 
+    public async Task<IEnumerable<ReviewReply>> GetAllAsync()
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM ReviewReplies";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<ReviewReply>();
+            while (await r.ReadAsync()) list.Add(MapReply(r));
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+
+    public async Task AddAsync(ReviewReply entity) => await InsertAndReturnIdAsync(entity);
+
+    public async Task UpdateAsync(ReviewReply entity)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "UPDATE ReviewReplies SET content=@Content WHERE reply_id=@Id";
+            cmd.Parameters.AddWithValue("@Content", entity.Content);
+            cmd.Parameters.AddWithValue("@Id", entity.ReplyId);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+
+    public async Task DeleteAsync(long id)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "DELETE FROM ReviewReplies WHERE reply_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+
+    public async Task<long> InsertAndReturnIdAsync(ReviewReply reply)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO ReviewReplies (review_id, staff_id, content, created_at)
+                               OUTPUT INSERTED.reply_id VALUES (@RId, @SId, @Content, @Created)";
+            cmd.Parameters.AddWithValue("@RId", reply.ReviewId);
+            cmd.Parameters.AddWithValue("@SId", reply.StaffId);
+            cmd.Parameters.AddWithValue("@Content", reply.Content);
+            cmd.Parameters.AddWithValue("@Created", reply.CreatedAt);
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+
+    public async Task<IEnumerable<ReviewReply>> GetByReviewIdAsync(long reviewId)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM ReviewReplies WHERE review_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", reviewId);
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<ReviewReply>();
+            while (await r.ReadAsync()) list.Add(MapReply(r));
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+
+    private ReviewReply MapReply(SqlDataReader r) => new()
+    {
+        ReplyId = r.GetInt64(r.GetOrdinal("reply_id")),
+        ReviewId = r.GetInt64(r.GetOrdinal("review_id")),
+        StaffId = r.GetInt64(r.GetOrdinal("staff_id")),
+        Content = r.GetString(r.GetOrdinal("content")),
+        CreatedAt = r.GetDateTime(r.GetOrdinal("created_at"))
+    };
+}
 
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\ReviewRepository.cs
 `$language
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
@@ -7619,29 +12657,50 @@ using RestaurantMS.Infrastructure.Data;
 
 namespace RestaurantMS.Infrastructure.Repositories;
 
-public class ReviewRepository : IReviewRepository
+public class ReviewRepository : BaseRepository, IReviewRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
-    public ReviewRepository(SqlConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
-    public async Task<Review> GetByIdAsync(long id) { return null; }
+    public ReviewRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<Review?> GetByIdAsync(long id) { return null; }
     public async Task<IEnumerable<Review>> GetAllAsync() { return new List<Review>(); }
     public async Task AddAsync(Review entity) {}
     public async Task UpdateAsync(Review entity) {}
     public async Task DeleteAsync(long id) {}
-
-    private Review MapReview(SqlDataReader reader)
+    
+    public async Task<bool> ExistsByInvoiceIdAsync(long invoiceId)
     {
-        return new Review();
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT COUNT(1) FROM Reviews WHERE invoice_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", invoiceId);
+            return (int)await cmd.ExecuteScalarAsync() > 0;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+
+    public async Task<long> InsertAndReturnIdAsync(Review review)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO Reviews (invoice_id, customer_id, stars, content, created_at)
+                               OUTPUT INSERTED.review_id VALUES (@IId, @CId, @Stars, @Content, @Created)";
+            cmd.Parameters.AddWithValue("@IId", review.InvoiceId);
+            cmd.Parameters.AddWithValue("@CId", review.CustomerId);
+            cmd.Parameters.AddWithValue("@Stars", review.Stars);
+            cmd.Parameters.AddWithValue("@Content", review.Content);
+            cmd.Parameters.AddWithValue("@Created", review.CreatedAt);
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
     }
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\StaffRepository.cs
 `$language
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System;
 using Microsoft.Data.SqlClient;
 using RestaurantMS.Application.Interfaces;
 using RestaurantMS.Domain.Entities;
@@ -7649,82 +12708,392 @@ using RestaurantMS.Infrastructure.Data;
 
 namespace RestaurantMS.Infrastructure.Repositories;
 
-public class StaffRepository : IStaffRepository
+public class StaffRepository : BaseRepository, IStaffRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
-    public StaffRepository(SqlConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
-    public async Task<Staff> GetByIdAsync(long id) { return null; }
-    public async Task<IEnumerable<Staff>> GetAllAsync() { return new List<Staff>(); }
+    public StaffRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<Staff?> GetByIdAsync(long id) { return null; }
+    public async Task<IEnumerable<Staff>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Staff ORDER BY full_name";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<Staff>();
+            while (await r.ReadAsync()) {
+                list.Add(new Staff {
+                    StaffId = r.GetInt64(r.GetOrdinal("staff_id")),
+                    FullName = r.GetString(r.GetOrdinal("full_name")),
+                    Email = r.GetString(r.GetOrdinal("email")),
+                    Password = r.GetString(r.GetOrdinal("password")),
+                    Role = r.GetString(r.GetOrdinal("role")),
+                    IsActive = r.GetBoolean(r.GetOrdinal("is_active"))
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
     public async Task AddAsync(Staff entity) {}
     public async Task UpdateAsync(Staff entity) {}
     public async Task DeleteAsync(long id) {}
-
-    private Staff MapStaff(SqlDataReader reader)
+    
+    public async Task<Staff?> GetByEmailAsync(string email)
     {
-        return new Staff();
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM Staff WHERE email = @Email";
+            cmd.Parameters.AddWithValue("@Email", email);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) {
+                return new Staff {
+                    StaffId = r.GetInt64(r.GetOrdinal("staff_id")),
+                    FullName = r.GetString(r.GetOrdinal("full_name")),
+                    Email = r.GetString(r.GetOrdinal("email")),
+                    Password = r.GetString(r.GetOrdinal("password")),
+                    Role = r.GetString(r.GetOrdinal("role")),
+                    IsActive = r.GetBoolean(r.GetOrdinal("is_active"))
+                };
+            }
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    
+    public async Task<long> InsertAndReturnIdAsync(Staff entity) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO Staff (full_name, email, phone, password, role, is_active, created_at)
+                               OUTPUT INSERTED.staff_id VALUES (@Name,@Email,@Phone,@Pass,@Role,1,GETUTCDATE())";
+            cmd.Parameters.AddWithValue("@Name",  entity.FullName);
+            cmd.Parameters.AddWithValue("@Email", entity.Email);
+            cmd.Parameters.AddWithValue("@Phone", (object?)entity.Phone ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@Pass",  entity.Password);
+            cmd.Parameters.AddWithValue("@Role",  entity.Role);
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
     }
 }
-
-
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\TableReservationRepository.cs
 `$language
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
 using RestaurantMS.Application.Interfaces;
 using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
 using RestaurantMS.Infrastructure.Data;
 
 namespace RestaurantMS.Infrastructure.Repositories;
 
-public class TableReservationRepository : ITableReservationRepository
+public class TableReservationRepository : BaseRepository, ITableReservationRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
-    public TableReservationRepository(SqlConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
-    public async Task<TableReservation> GetByIdAsync(long id) { return null; }
-    public async Task<IEnumerable<TableReservation>> GetAllAsync() { return new List<TableReservation>(); }
+    public TableReservationRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<TableReservation?> GetByIdAsync(long id) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM TableReservations WHERE reservation_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (!await r.ReadAsync()) return null;
+            return new TableReservation {
+                ReservationId = r.GetInt64(r.GetOrdinal("reservation_id")),
+                CustomerId    = r.GetInt64(r.GetOrdinal("customer_id")),
+                TableId       = (int)r.GetInt64(r.GetOrdinal("table_id")),
+                ReservedAt    = r.GetDateTime(r.GetOrdinal("reserved_at")),
+                GuestCount    = r.GetInt32(r.GetOrdinal("guest_count")),
+                Notes         = r.IsDBNull(r.GetOrdinal("notes")) ? null : r.GetString(r.GetOrdinal("notes")),
+                Status        = Enum.Parse<ReservationStatus>(r.GetString(r.GetOrdinal("status"))),
+            };
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    public async Task<IEnumerable<TableReservation>> GetAllAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT * FROM TableReservations ORDER BY reserved_at DESC";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<TableReservation>();
+            while (await r.ReadAsync()) {
+                list.Add(new TableReservation {
+                    ReservationId = r.GetInt64(r.GetOrdinal("reservation_id")),
+                    CustomerId    = r.GetInt64(r.GetOrdinal("customer_id")),
+                    TableId       = (int)r.GetInt64(r.GetOrdinal("table_id")),
+                    ReservedAt    = r.GetDateTime(r.GetOrdinal("reserved_at")),
+                    GuestCount    = r.GetInt32(r.GetOrdinal("guest_count")),
+                    Notes         = r.IsDBNull(r.GetOrdinal("notes")) ? null : r.GetString(r.GetOrdinal("notes")),
+                    Status        = Enum.Parse<ReservationStatus>(r.GetString(r.GetOrdinal("status"))),
+                });
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
     public async Task AddAsync(TableReservation entity) {}
     public async Task UpdateAsync(TableReservation entity) {}
     public async Task DeleteAsync(long id) {}
-
-    private TableReservation MapTableReservation(SqlDataReader reader)
+    public async Task<IEnumerable<TableReservation>> GetByCustomerIdAsync(long customerId) { return new List<TableReservation>(); }
+    
+    public async Task<long> InsertAndReturnIdAsync(TableReservation res)
     {
-        return new TableReservation();
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"INSERT INTO TableReservations (customer_id, table_id, reserved_at, guest_count, notes, status)
+                               OUTPUT INSERTED.reservation_id VALUES (@CId, @TId, @Date, @GC, @Notes, @Status)";
+            cmd.Parameters.AddWithValue("@CId", res.CustomerId);
+            cmd.Parameters.AddWithValue("@TId", res.TableId);
+            cmd.Parameters.AddWithValue("@Date", res.ReservedAt);
+            cmd.Parameters.AddWithValue("@GC", res.GuestCount);
+            cmd.Parameters.AddWithValue("@Notes", (object?)res.Notes ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@Status", res.Status.ToString());
+            return (long)await cmd.ExecuteScalarAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+
+    public async Task UpdateStatusAsync(long reservationId, ReservationStatus status) {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "UPDATE TableReservations SET status = @Status WHERE reservation_id = @Id";
+            cmd.Parameters.AddWithValue("@Status", status.ToString());
+            cmd.Parameters.AddWithValue("@Id", reservationId);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
     }
 }
+``n
 
+## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\UnitOfWork.cs
+`$language
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.Common.Interfaces;
+using RestaurantMS.Application.Interfaces;
+using RestaurantMS.Infrastructure.Data;
+
+namespace RestaurantMS.Infrastructure.Repositories
+{
+    public class UnitOfWork : IUnitOfWork
+    {
+        internal SqlConnection? ActiveConnection => _connection;
+        internal SqlTransaction? ActiveTransaction => _transaction;
+
+        private readonly SqlConnectionFactory _factory;
+        private SqlConnection? _connection;
+        private SqlTransaction? _transaction;
+
+        public IFBRepository FBs { get; }
+        public ICategoryRepository Categories { get; }
+        public IManufacturerRepository Manufacturers { get; }
+        public IWarehouseRepository Warehouses { get; }
+        public IRestaurantTableRepository Tables { get; }
+        public ITableReservationRepository Reservations { get; }
+        public IRestaurantOrderRepository Orders { get; }
+        public IOrderItemRepository OrderItems { get; }
+        public IReceiptRepository Receipts { get; }
+        public IReceiptDetailRepository ReceiptDetails { get; }
+        public IInvoiceRepository Invoices { get; }
+        public IDiscountCodeRepository DiscountCodes { get; }
+        public IReviewRepository Reviews { get; }
+        public IReviewReplyRepository ReviewReplies { get; }
+        public ICustomerRepository Customers { get; }
+        public IStaffRepository Staff { get; }
+
+        public UnitOfWork(SqlConnectionFactory factory)
+        {
+            _factory = factory;
+            FBs = new FBRepository(_factory, this);
+            Categories = new CategoryRepository(_factory, this);
+            Manufacturers = new ManufacturerRepository(_factory, this);
+            Warehouses = new WarehouseRepository(_factory, this);
+            Tables = new RestaurantTableRepository(_factory, this);
+            Reservations = new TableReservationRepository(_factory, this);
+            Orders = new RestaurantOrderRepository(_factory, this);
+            OrderItems = new OrderItemRepository(_factory, this);
+            Receipts = new ReceiptRepository(_factory, this);
+            ReceiptDetails = new ReceiptDetailRepository(_factory, this);
+            Invoices = new InvoiceRepository(_factory, this);
+            DiscountCodes = new DiscountCodeRepository(_factory, this);
+            Reviews = new ReviewRepository(_factory, this);
+            ReviewReplies = new ReviewReplyRepository(_factory, this);
+            Customers = new CustomerRepository(_factory, this);
+            Staff = new StaffRepository(_factory, this);
+        }
+
+        public async Task BeginTransactionAsync(CancellationToken ct = default)
+        {
+            _connection = await _factory.CreateConnectionAsync();
+            _transaction = (SqlTransaction)await _connection.BeginTransactionAsync(ct);
+        }
+
+        public async Task CommitAsync(CancellationToken ct = default)
+        {
+            if (_transaction != null)
+            {
+                await _transaction.CommitAsync(ct);
+                await _transaction.DisposeAsync();
+                _transaction = null;
+            }
+            if (_connection != null)
+            {
+                await _connection.CloseAsync();
+                await _connection.DisposeAsync();
+                _connection = null;
+            }
+        }
+
+        public async Task RollbackAsync(CancellationToken ct = default)
+        {
+            if (_transaction != null)
+            {
+                await _transaction.RollbackAsync(ct);
+                await _transaction.DisposeAsync();
+                _transaction = null;
+            }
+            if (_connection != null)
+            {
+                await _connection.CloseAsync();
+                await _connection.DisposeAsync();
+                _connection = null;
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (_transaction != null) await _transaction.DisposeAsync();
+            if (_connection != null) await _connection.DisposeAsync();
+        }
+    }
+}
 
 ``n
 
 ## File: RestaurantMS\src\RestaurantMS.Infrastructure\Repositories\WarehouseRepository.cs
 `$language
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
+using RestaurantMS.Application.DTOs;
 using RestaurantMS.Application.Interfaces;
 using RestaurantMS.Domain.Entities;
+using RestaurantMS.Domain.Enums;
 using RestaurantMS.Infrastructure.Data;
 
 namespace RestaurantMS.Infrastructure.Repositories;
 
-public class WarehouseRepository : IWarehouseRepository
+public class WarehouseRepository : BaseRepository, IWarehouseRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
-    public WarehouseRepository(SqlConnectionFactory connectionFactory) { _connectionFactory = connectionFactory; }
-    public async Task<Warehouse> GetByIdAsync(long id) { return null; }
+    public WarehouseRepository(SqlConnectionFactory factory, UnitOfWork uow) : base(factory, uow) {}
+
+    public async Task<Warehouse?> GetByIdAsync(long id) { return null; }
     public async Task<IEnumerable<Warehouse>> GetAllAsync() { return new List<Warehouse>(); }
     public async Task AddAsync(Warehouse entity) {}
     public async Task UpdateAsync(Warehouse entity) {}
     public async Task DeleteAsync(long id) {}
 
-    private Warehouse MapWarehouse(SqlDataReader reader)
+    public async Task<Warehouse?> GetByFBIdAsync(long fbId)
     {
-        return new Warehouse();
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "SELECT w.*, f.type as fb_type FROM Warehouses w INNER JOIN FBs f ON w.fb_id = f.fb_id WHERE w.fb_id = @Id";
+            cmd.Parameters.AddWithValue("@Id", fbId);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync()) {
+                return new Warehouse { 
+                    ItemId = (int)r.GetInt64(r.GetOrdinal("fb_id")), 
+                    Quantity = r.GetInt32(r.GetOrdinal("quantity")),
+                    FBType = Enum.Parse<FBType>(r.GetString(r.GetOrdinal("fb_type")))
+                };
+            }
+            return null;
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    
+    public async Task UpdateQuantityAsync(long fbId, int newQuantity)
+    {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = "UPDATE Warehouses SET quantity = @Qty WHERE fb_id = @Id";
+            cmd.Parameters.AddWithValue("@Qty", newQuantity);
+            cmd.Parameters.AddWithValue("@Id", fbId);
+            await cmd.ExecuteNonQueryAsync();
+        } finally { if (owned) await conn.DisposeAsync(); }
+    }
+    
+    public async Task<IEnumerable<WarehouseReportRow>> GetReportAsync() {
+        var (conn, tx, owned) = await GetConnAsync();
+        try {
+            await using var cmd = conn.CreateCommand(); cmd.Transaction = tx;
+            cmd.CommandText = @"
+                SELECT f.fb_id, f.name, f.type, w.quantity, w.low_stock_threshold,
+                       CASE WHEN w.quantity = 0 THEN 'OUT_OF_STOCK'
+                            WHEN w.quantity <= w.low_stock_threshold THEN 'LOW_STOCK'
+                            ELSE 'NORMAL' END AS stock_status
+                FROM Warehouses w
+                INNER JOIN FBs f ON f.fb_id = w.fb_id
+                ORDER BY CASE WHEN w.quantity = 0 THEN 0 WHEN w.quantity <= w.low_stock_threshold THEN 1 ELSE 2 END, f.name";
+            await using var r = await cmd.ExecuteReaderAsync();
+            var list = new List<WarehouseReportRow>();
+            while (await r.ReadAsync()) {
+                list.Add(new WarehouseReportRow(
+                    r.GetInt64(0), r.GetString(1), Enum.Parse<FBType>(r.GetString(2)),
+                    r.GetInt32(3), r.GetInt32(4), Enum.Parse<StockStatus>(r.GetString(5))
+                ));
+            }
+            return list;
+        } finally { if (owned) await conn.DisposeAsync(); }
     }
 }
+``n
 
+## File: RestaurantMS\src\RestaurantMS.Infrastructure\Services\CurrentUserService.cs
+`$language
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
+using RestaurantMS.Application.Common.Interfaces;
 
+namespace RestaurantMS.Infrastructure.Services;
+
+public class CurrentUserService : ICurrentUserService
+{
+    private readonly IHttpContextAccessor _httpContextAccessor;
+
+    public CurrentUserService(IHttpContextAccessor httpContextAccessor)
+    {
+        _httpContextAccessor = httpContextAccessor;
+    }
+
+    public long? UserId
+    {
+        get
+        {
+            var idClaim = _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+            return long.TryParse(idClaim, out var id) ? id : null;
+        }
+    }
+}
+``n
+
+## File: RestaurantMS\src\RestaurantMS.Infrastructure\Services\DateTimeService.cs
+`$language
+using System;
+using RestaurantMS.Application.Common.Interfaces;
+
+namespace RestaurantMS.Infrastructure.Services;
+
+public class DateTimeService : IDateTimeService
+{
+    public DateTime UtcNow => DateTime.UtcNow;
+}
 ``n
 

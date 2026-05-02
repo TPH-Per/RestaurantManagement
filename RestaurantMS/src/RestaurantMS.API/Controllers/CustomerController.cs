@@ -1,18 +1,20 @@
 using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Features.Customer.Queries;
 
 namespace RestaurantMS.API.Controllers;
 
+[Route("api/customers")]
 [ApiController]
-[Route("api/[controller]")]
+[Authorize(Policy = "StaffOnly")]
 public class CustomerController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    public CustomerController(IMediator mediator) { _mediator = mediator; }
+    private readonly IMediator _m;
+    public CustomerController(IMediator m) => _m = m;
 
     [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
+    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(new List<object>());
 }
-

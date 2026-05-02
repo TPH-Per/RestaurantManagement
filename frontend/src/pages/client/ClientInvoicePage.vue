@@ -1,7 +1,12 @@
+import { categoryService } from '@/services/category.service';
+import { menuService } from '@/services/menu.service';
+import { orderService } from '@/services/order.service';
+import { reservationService } from '@/services/reservation.service';
+import { invoiceService } from '@/services/invoice.service';
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import gsap from 'gsap'
-import { useReservation, useAuth, useCustomer, useMenuItem, useTable, useOrder, useUser, useCategory, useSupplier, usePurchaseOrder, useInventoryItem, useOrderItem, useInvoice, usePayment, useShift, useFb, useDiscounts, useStaff, useManufacturers, useReceipts, useDashboard, useReviews } from '@/composables/useAll'
+
 import { toast } from '../../services/toast'
 import { useRouter } from 'vue-router'
 import { useClientAuthStore } from '../../stores/clientAuth'

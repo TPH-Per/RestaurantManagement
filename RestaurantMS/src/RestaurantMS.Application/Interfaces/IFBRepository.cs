@@ -11,5 +11,6 @@ public interface IFBRepository
     Task AddAsync(FB entity);
     Task UpdateAsync(FB entity);
     Task DeleteAsync(long id);
+    Task<IEnumerable<FB>> GetMenuAsync(bool includeInhouse = false);
+    Task<long> InsertAndReturnIdAsync(FB entity);
 }
-

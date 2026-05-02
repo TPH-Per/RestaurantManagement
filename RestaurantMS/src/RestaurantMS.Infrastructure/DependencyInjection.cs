@@ -1,23 +1,29 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using RestaurantMS.Application.Common.Interfaces;
 using RestaurantMS.Infrastructure.Identity;
-using RestaurantMS.Infrastructure.Persistence;
+using RestaurantMS.Infrastructure.Data;
+using RestaurantMS.Infrastructure.Repositories;
+using RestaurantMS.Infrastructure.Services;
 
 namespace RestaurantMS.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
     {
-        services.AddDbContext<AppDbContext>(options =>
-            options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
+        services.AddSingleton<SqlConnectionFactory>(); // shared, thread-safe
 
-        services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<AppDbContext>());
-        
-        services.AddScoped<IPasswordHasher, PasswordHasher>();
+        // UnitOfWork: Scoped — one per HTTP request, wraps all 16 repos
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        // Application-layer service implementations
         services.AddScoped<IJwtTokenService, JwtTokenService>();
+        services.AddScoped<IPasswordHasher,  PasswordHasher>();
+        services.AddScoped<IDateTimeService, DateTimeService>();
+
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentUserService, CurrentUserService>();
 
         return services;
     }

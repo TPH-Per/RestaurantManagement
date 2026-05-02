@@ -11,5 +11,7 @@ public interface ICustomerRepository
     Task AddAsync(Customer entity);
     Task UpdateAsync(Customer entity);
     Task DeleteAsync(long id);
+    Task<Customer?> GetByPhoneAsync(string phone);
+    Task UpdateLoyaltyPointsAsync(long customerId, int points);
+    Task<long> InsertAndReturnIdAsync(Customer entity);
 }
-

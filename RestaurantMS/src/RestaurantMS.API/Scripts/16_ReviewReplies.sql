@@ -1,0 +1,1 @@
+CREATE TABLE ReviewReplies ( reply_id BIGINT IDENTITY(1,1) PRIMARY KEY, review_id BIGINT NOT NULL, staff_id BIGINT NOT NULL, content NVARCHAR(1000) NOT NULL, created_at DATETIME2 NOT NULL );

@@ -1,18 +1,27 @@
 using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Features.Receipt.Queries;
+using RestaurantMS.Application.Features.Receipt.Commands.CreateReceipt;
 
 namespace RestaurantMS.API.Controllers;
 
+[Route("api/receipts")]
 [ApiController]
-[Route("api/[controller]")]
+[Authorize(Policy = "ManagerOnly")]
 public class ReceiptController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    public ReceiptController(IMediator mediator) { _mediator = mediator; }
+
+    private readonly IMediator _m;
+    public ReceiptController(IMediator m) => _m = m;
+
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateReceiptCommand cmd, CancellationToken ct) 
+        => Ok(await _m.Send(cmd, ct));
 
     [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
+    [Authorize(Policy = "StaffOnly")]
+    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _m.Send(new GetAllReceiptsQuery(), ct));
 }
-

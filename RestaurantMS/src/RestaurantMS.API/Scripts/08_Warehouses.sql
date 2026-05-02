@@ -1,0 +1,1 @@
+CREATE TABLE Warehouses ( warehouse_id BIGINT IDENTITY(1,1) PRIMARY KEY, fb_id BIGINT NOT NULL, quantity INT NOT NULL, low_stock_threshold INT NOT NULL );

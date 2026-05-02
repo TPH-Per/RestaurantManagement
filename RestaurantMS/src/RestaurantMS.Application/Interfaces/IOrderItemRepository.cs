@@ -11,5 +11,6 @@ public interface IOrderItemRepository
     Task AddAsync(OrderItem entity);
     Task UpdateAsync(OrderItem entity);
     Task DeleteAsync(long id);
+    Task<IEnumerable<OrderItem>> GetByOrderIdAsync(long orderId);
+    Task<long> InsertAndReturnIdAsync(OrderItem item);
 }
-

@@ -11,5 +11,6 @@ public interface IReviewRepository
     Task AddAsync(Review entity);
     Task UpdateAsync(Review entity);
     Task DeleteAsync(long id);
+    Task<bool> ExistsByInvoiceIdAsync(long invoiceId);
+    Task<long> InsertAndReturnIdAsync(Review review);
 }
-

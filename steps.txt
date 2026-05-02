@@ -1,0 +1,1507 @@
+=== FB.cs — add IsSellable() + visibility guard ===
+// RestaurantMS.Domain/Entities/FB.cs \u{2014} ADD these methods to existing class
+public class FB
+{
+    // ... existing properties (FBId, Name, Price, Type, CategoryId, etc.) ...
+
+    // Mirrors business rule: FRESH_RAW items are never available for sale
+    public bool IsSellable() => Type != FBType.FRESH_RAW && IsVisible;
+
+    // Domain invariant: FRESH_RAW can never be made visible on menu
+    public void SetVisibility(bool visible)
+    {
+        if (Type == FBType.FRESH_RAW && visible)
+            throw new DomainException("FRESH_RAW items cannot be shown on the menu.");
+        IsVisible = visible;
+    }
+}
+
+=== Warehouse.cs — stock adjustment rules per FBType ===
+// RestaurantMS.Domain/Entities/Warehouse.cs \u{2014} ADD these methods
+public class Warehouse
+{
+    // ... existing properties (FBId, FBType, Quantity, LowStockThreshold) ...
+
+    // Called when OrderItem is created \u{2014} REGULAR enforced strictly
+    public void DeductStock(int amount, string fbName)
+    {
+        if (amount <= 0) throw new DomainException("Amount must be positive.");
+        if (FBType == FBType.REGULAR && Quantity - amount < 0)
+            throw new StockCannotGoNegativeException(fbName, Quantity, amount);
+        Quantity -= amount;
+    }
+
+    // Called when OrderItem is removed or Order is cancelled
+    public void RestoreStock(int amount)
+    {
+        if (amount <= 0) throw new DomainException("Amount must be positive.");
+        Quantity += amount;
+    }
+
+    // Called by Receipt handler \u{2014} adds stock after import
+    public void AddStock(int amount)
+    {
+        if (amount <= 0) throw new DomainException("Import amount must be positive.");
+        Quantity += amount;
+    }
+
+    // Staff-only: INHOUSE (kitchen output) or FRESH_RAW (spoilage). REGULAR is FORBIDDEN.
+    public void AdjustStock(int newQuantity, string fbName)
+    {
+        if (FBType == FBType.REGULAR)
+            throw new DomainException($"REGULAR stock for '{fbName}' cannot be adjusted manually.");
+        if (newQuantity < 0)
+            throw new DomainException("Stock quantity cannot be negative.");
+        Quantity = newQuantity;
+    }
+
+    public StockStatus GetStockStatus()
+    {
+        if (Quantity == 0) return StockStatus.OUT_OF_STOCK;
+        if (Quantity <= LowStockThreshold) return StockStatus.LOW_STOCK;
+        return StockStatus.NORMAL;
+    }
+}
+
+=== RestaurantOrder.cs — order status machine ===
+// RestaurantMS.Domain/Entities/RestaurantOrder.cs \u{2014} ADD these methods
+public class RestaurantOrder
+{
+    // ... existing properties ...
+
+    public bool CanAddItem() =>
+        Status == OrderStatus.PENDING || Status == OrderStatus.SERVING;
+
+    public bool CanCreateInvoice() => Status == OrderStatus.COMPLETED;
+
+    public void StartServing()
+    {
+        if (Status != OrderStatus.PENDING)
+            throw new DomainException("Only PENDING orders can move to SERVING.");
+        Status = OrderStatus.SERVING;
+    }
+
+    public void Complete()
+    {
+        if (Status != OrderStatus.SERVING)
+            throw new DomainException("Only SERVING orders can be completed.");
+        Status = OrderStatus.COMPLETED;
+    }
+
+    public void Cancel()
+    {
+        if (Status == OrderStatus.COMPLETED)
+            throw new DomainException("Completed orders cannot be cancelled.");
+        Status = OrderStatus.CANCELLED;
+    }
+}
+
+=== Invoice.cs — factory method + payment guard ===
+// RestaurantMS.Domain/Entities/Invoice.cs \u{2014} ADD factory + methods
+public class Invoice
+{
+    // ... existing properties ...
+
+    // Factory enforces: invoice only for COMPLETED orders
+    public static Invoice Create(RestaurantOrder order, decimal subtotal)
+    {
+        if (!order.CanCreateInvoice())
+            throw new InvoiceRequiresCompletedOrderException();
+        return new Invoice { OrderId = order.OrderId, Subtotal = subtotal,
+            Total = subtotal, Status = InvoiceStatus.UNPAID };
+    }
+
+    public void ApplyDiscount(decimal discountAmount)
+    {
+        if (Status != InvoiceStatus.UNPAID)
+            throw new DomainException("Discount can only be applied to UNPAID invoice.");
+        DiscountAmount = discountAmount;
+        Total = Math.Max(0, Subtotal - discountAmount);
+    }
+
+    public void MarkPaid(PaymentMethod method, long cashierId)
+    {
+        if (Status != InvoiceStatus.UNPAID)
+            throw new DomainException("Invoice is already paid or refunded.");
+        Status = InvoiceStatus.PAID;
+        PaymentMethod = method;
+        CashierId = cashierId;
+        PaidAt = DateTime.UtcNow;
+    }
+
+    public bool CanBeReviewed() => Status == InvoiceStatus.PAID;
+}
+
+=== Review.cs — factory with paid-invoice guard ===
+// RestaurantMS.Domain/Entities/Review.cs \u{2014} ADD factory
+public class Review
+{
+    // ... existing properties ...
+
+    public static Review Create(Invoice invoice, long customerId, int stars, string content)
+    {
+        if (!invoice.CanBeReviewed())
+            throw new ReviewRequiresPaidInvoiceException();
+        if (stars < 1 || stars > 5)
+            throw new DomainException("Stars must be between 1 and 5.");
+        if (string.IsNullOrWhiteSpace(content))
+            throw new DomainException("Review content cannot be empty.");
+        return new Review { InvoiceId = invoice.InvoiceId, CustomerId = customerId,
+            Stars = stars, Content = content, CreatedAt = DateTime.UtcNow };
+    }
+}
+
+=== Receipt.cs — INHOUSE import guard ===
+// RestaurantMS.Domain/Entities/Receipt.cs \u{2014} ADD static validator
+public class Receipt
+{
+    // ... existing properties ...
+
+    // Called before inserting each receipt detail line
+    public static void ValidateItem(FB fb, long receiptManufacturerId)
+    {
+        if (fb.Type == FBType.INHOUSE)
+            throw new InhouseCannotBeImportedException(fb.Name);
+
+        // All items in one receipt must share the same manufacturer
+        if (fb.ManufacturerId.HasValue && fb.ManufacturerId.Value != receiptManufacturerId)
+            throw new DomainException(
+                $"'{fb.Name}' belongs to a different manufacturer than this receipt.");
+    }
+}
+
+=== RestaurantTable.cs — reservation availability guard ===
+// RestaurantMS.Domain/Entities/RestaurantTable.cs \u{2014} ADD status methods
+public class RestaurantTable
+{
+    public void Reserve()
+    {
+        if (Status != TableStatus.AVAILABLE)
+            throw new TableNotAvailableException(TableId);
+        Status = TableStatus.RESERVED;
+    }
+    public void SetOccupied()  => Status = TableStatus.OCCUPIED;
+    public void Free()         => Status = TableStatus.AVAILABLE;
+    public void SetMaintenance() => Status = TableStatus.MAINTENANCE;
+}
+
+=== CREATE all typed Domain Exceptions — replace the 3 generic ones ===
+// RestaurantMS.Domain/Exceptions/ \u{2014} create these 8 files:
+
+// DomainException.cs (base \u{2014} abstract)
+public abstract class DomainException : Exception
+{
+    protected DomainException(string message) : base(message) { }
+}
+
+// FreshRawCannotBeSoldException.cs
+public class FreshRawCannotBeSoldException : DomainException
+{
+    public FreshRawCannotBeSoldException(string name)
+        : base($"'{name}' is a raw ingredient and cannot be sold.") { }
+}
+
+// StockCannotGoNegativeException.cs
+public class StockCannotGoNegativeException : DomainException
+{
+    public StockCannotGoNegativeException(string name, int available, int requested)
+        : base($"Insufficient stock for '{name}': available={available}, requested={requested}.") { }
+}
+
+// InhouseCannotBeImportedException.cs
+public class InhouseCannotBeImportedException : DomainException
+{
+    public InhouseCannotBeImportedException(string name)
+        : base($"'{name}' is an in-house item and cannot be imported.") { }
+}
+
+// ReviewRequiresPaidInvoiceException.cs
+public class ReviewRequiresPaidInvoiceException : DomainException
+{
+    public ReviewRequiresPaidInvoiceException()
+        : base("A review can only be submitted after the invoice is paid.") { }
+}
+
+// InvoiceRequiresCompletedOrderException.cs
+public class InvoiceRequiresCompletedOrderException : DomainException
+{
+    public InvoiceRequiresCompletedOrderException()
+        : base("An invoice can only be created for a completed order.") { }
+}
+
+// TableNotAvailableException.cs
+public class TableNotAvailableException : DomainException
+{
+    public TableNotAvailableException(long tableId)
+        : base($"Table {tableId} is not available for reservation.") { }
+}
+
+// NotFoundException.cs (move FROM Application.Common.Exceptions to Domain)
+public class NotFoundException : DomainException
+{
+    public NotFoundException(string entityName, object key)
+        : base($"{entityName} ({key}) was not found.") { }
+}
+
+=== DELETE IApplicationDbContext.cs — both copies ===
+// RestaurantMS.Application/Common/Interfaces/IUnitOfWork.cs
+public interface IUnitOfWork : IAsyncDisposable
+{
+    IFBRepository           FBs           { get; }
+    ICategoryRepository     Categories    { get; }
+    IManufacturerRepository Manufacturers { get; }
+    IWarehouseRepository    Warehouses    { get; }
+    IRestaurantTableRepository    Tables  { get; }
+    ITableReservationRepository   Reservations { get; }
+    IRestaurantOrderRepository    Orders  { get; }
+    IOrderItemRepository    OrderItems    { get; }
+    IReceiptRepository      Receipts      { get; }
+    IReceiptDetailRepository ReceiptDetails { get; }
+    IInvoiceRepository      Invoices      { get; }
+    IDiscountCodeRepository DiscountCodes { get; }
+    IReviewRepository       Reviews       { get; }
+    IReviewReplyRepository  ReviewReplies { get; }
+    ICustomerRepository     Customers     { get; }
+    IStaffRepository        Staff         { get; }
+
+    Task BeginTransactionAsync(CancellationToken ct = default);
+    Task CommitAsync(CancellationToken ct = default);
+    Task RollbackAsync(CancellationToken ct = default);
+}
+
+=== Extend repo interfaces — add domain-specific query methods ===
+// Each repo currently only has: GetByIdAsync, GetAllAsync, AddAsync, UpdateAsync, DeleteAsync
+// ADD these domain-specific methods to each interface:
+
+// IFBRepository.cs
+Task<IEnumerable<FB>> GetMenuAsync(bool includeInhouse = false);
+Task<long> InsertAndReturnIdAsync(FB entity);
+
+// IWarehouseRepository.cs
+Task<Warehouse?> GetByFBIdAsync(long fbId);
+Task UpdateQuantityAsync(long fbId, int newQuantity);
+Task<IEnumerable<WarehouseReportRow>> GetReportAsync();
+
+// IRestaurantOrderRepository.cs
+Task<RestaurantOrder?> GetWithItemsAsync(long orderId);
+Task<IEnumerable<RestaurantOrder>> GetByTableAsync(long tableId);
+Task<long> InsertAndReturnIdAsync(RestaurantOrder order);
+Task UpdateStatusAsync(long orderId, OrderStatus status);
+
+// IOrderItemRepository.cs
+Task<IEnumerable<OrderItem>> GetByOrderIdAsync(long orderId);
+Task<long> InsertAndReturnIdAsync(OrderItem item);
+
+// IInvoiceRepository.cs
+Task<Invoice?> GetByOrderIdAsync(long orderId);   // enforce 1 per order
+Task<long> InsertAndReturnIdAsync(Invoice invoice);
+
+// IDiscountCodeRepository.cs
+Task<DiscountCode?> GetByCodeAsync(string code);
+Task IncrementUsedCountAsync(long discountCodeId); // atomic UPDATE used_count = used_count + 1
+
+// IStaffRepository.cs
+Task<Staff?> GetByEmailAsync(string email);
+
+// ICustomerRepository.cs
+Task<Customer?> GetByPhoneAsync(string phone);
+Task UpdateLoyaltyPointsAsync(long customerId, int points);
+
+// ITableReservationRepository.cs
+Task<IEnumerable<TableReservation>> GetByCustomerIdAsync(long customerId);
+Task UpdateStatusAsync(long reservationId, ReservationStatus status);
+
+// IReviewRepository.cs
+Task<bool> ExistsByInvoiceIdAsync(long invoiceId); // enforce 1 per invoice
+Task<long> InsertAndReturnIdAsync(Review review);
+
+// IReceiptRepository.cs
+Task<Receipt?> GetWithDetailsAsync(long receiptId);
+Task<long> InsertAndReturnIdAsync(Receipt receipt);
+
+=== Fix IJwtTokenService.cs — add GenerateStaffToken ===
+// RestaurantMS.Application/Common/Interfaces/IJwtTokenService.cs
+// BEFORE: only GenerateCustomerToken
+// AFTER:
+public interface IJwtTokenService
+{
+    string GenerateCustomerToken(Customer customer);
+    string GenerateStaffToken(Staff staff);   // \u{2190} ADD THIS
+}
+
+// Implementation in Infrastructure/Services/JwtTokenService.cs
+public class JwtTokenService : IJwtTokenService
+{
+    public string GenerateCustomerToken(Customer customer) => CreateToken(new[]
+    {
+        new Claim(ClaimTypes.NameIdentifier, customer.CustomerId.ToString()),
+        new Claim(ClaimTypes.MobilePhone, customer.Phone),
+        new Claim(ClaimTypes.Role, "CUSTOMER"),
+        new Claim("FullName", customer.FullName)
+    });
+
+    public string GenerateStaffToken(Staff staff) => CreateToken(new[]
+    {
+        new Claim(ClaimTypes.NameIdentifier, staff.StaffId.ToString()),
+        new Claim(ClaimTypes.Email, staff.Email),
+        new Claim(ClaimTypes.Role, staff.Role.ToString()), // "MANAGER" or "ADMIN"
+        new Claim("FullName", staff.FullName)
+    });
+
+    private string CreateToken(IEnumerable<Claim> claims)
+    {
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secret));
+        var token = new JwtSecurityToken(issuer: _issuer, audience: _audience,
+            claims: claims, expires: DateTime.UtcNow.AddMinutes(_expiryMinutes),
+            signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+}
+
+=== UPDATE Application/DependencyInjection.cs — add behaviors + validators ===
+// RestaurantMS.Application/DependencyInjection.cs
+// BEFORE: only services.AddMediatR(...)
+// AFTER:
+public static class DependencyInjection
+{
+    public static IServiceCollection AddApplication(this IServiceCollection services)
+    {
+        services.AddMediatR(cfg =>
+        {
+            cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly());
+            cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+            cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
+        });
+        // Registers all IValidator<T> from this assembly automatically
+        services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
+        return services;
+    }
+}
+
+=== CREATE ValidationBehavior.cs — fires before every handler ===
+// RestaurantMS.Application/Common/Behaviors/ValidationBehavior.cs
+public class ValidationBehavior<TRequest, TResponse>
+    : IPipelineBehavior<TRequest, TResponse> where TRequest : notnull
+{
+    private readonly IEnumerable<IValidator<TRequest>> _validators;
+    public ValidationBehavior(IEnumerable<IValidator<TRequest>> validators)
+        => _validators = validators;
+
+    public async Task<TResponse> Handle(
+        TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken ct)
+    {
+        if (!_validators.Any()) return await next();
+
+        var context  = new ValidationContext<TRequest>(request);
+        var failures = _validators
+            .Select(v => v.Validate(context))
+            .SelectMany(r => r.Errors)
+            .Where(f => f != null)
+            .ToList();
+
+        if (failures.Count > 0)
+            throw new Application.Common.Exceptions.ValidationException(
+                failures.Select(f => f.ErrorMessage));
+
+        return await next();
+    }
+}
+
+=== CREATE LoginStaffCommand — replaces the broken AuthService ===
+// RestaurantMS.Application/Features/Auth/Commands/LoginStaff/LoginStaffCommand.cs
+public record LoginStaffCommand(string Email, string Password) : IRequest<StaffAuthDto>;
+public record StaffAuthDto(long StaffId, string FullName, string Role, string Token);
+
+// LoginStaffCommandValidator.cs
+public class LoginStaffCommandValidator : AbstractValidator<LoginStaffCommand>
+{
+    public LoginStaffCommandValidator()
+    {
+        RuleFor(x => x.Email).NotEmpty().EmailAddress();
+        RuleFor(x => x.Password).NotEmpty().MinimumLength(6);
+    }
+}
+
+// LoginStaffCommandHandler.cs
+public class LoginStaffCommandHandler : IRequestHandler<LoginStaffCommand, StaffAuthDto>
+{
+    private readonly IUnitOfWork _uow;
+    private readonly IPasswordHasher _hasher;
+    private readonly IJwtTokenService _jwt;
+
+    public LoginStaffCommandHandler(IUnitOfWork uow, IPasswordHasher hasher, IJwtTokenService jwt)
+        => (_uow, _hasher, _jwt) = (uow, hasher, jwt);
+
+    public async Task<StaffAuthDto> Handle(LoginStaffCommand req, CancellationToken ct)
+    {
+        // 1. Find by email
+        var staff = await _uow.Staff.GetByEmailAsync(req.Email)
+            ?? throw new NotFoundException(nameof(Staff), req.Email);
+
+        // 2. Must be active
+        if (!staff.IsActive)
+            throw new ForbiddenException("This account has been deactivated.");
+
+        // 3. BCrypt verify \u{2014} NO MORE staffId.ToString() fallback
+        if (!_hasher.VerifyPassword(req.Password, staff.Password))
+            throw new UnauthorizedAccessException("Invalid email or password.");
+
+        // 4. Generate JWT with MANAGER or ADMIN role claim
+        var token = _jwt.GenerateStaffToken(staff);
+
+        return new StaffAuthDto(staff.StaffId, staff.FullName, staff.Role.ToString(), token);
+    }
+}
+
+=== Feature folder tree — create all Command/Query skeletons ===
+// RestaurantMS.Application/Features/ \u{2014} FULL FOLDER STRUCTURE
+// (one handler per command/query, each folder has Command + Validator + Handler + DTO)
+
+Features/
+├\u{2500}\u{2500} Auth/
+\u{2502}   ├\u{2500}\u{2500} Commands/RegisterCustomer/   \u{2190} exists, keep + fix to use IUnitOfWork
+\u{2502}   ├\u{2500}\u{2500} Commands/LoginStaff/         \u{2190} created above
+\u{2502}   \u{2514}\u{2500}\u{2500} Commands/LoginCustomer/      \u{2190} same pattern as LoginStaff
+├\u{2500}\u{2500} Menu/
+\u{2502}   ├\u{2500}\u{2500} Commands/CreateFB/           CreateFBCommand, Validator, Handler \u{2192} FBDto
+\u{2502}   ├\u{2500}\u{2500} Commands/UpdateFB/           UpdateFBCommand (calls fb.SetVisibility())
+\u{2502}   ├\u{2500}\u{2500} Commands/DeleteFB/
+\u{2502}   \u{2514}\u{2500}\u{2500} Queries/GetMenu/             GetMenuQuery \u{2192} FBDto[] (excludes FRESH_RAW)
+├\u{2500}\u{2500} Warehouse/
+\u{2502}   ├\u{2500}\u{2500} Commands/AdjustInhouseStock/ Calls warehouse.AdjustStock() \u{2014} only INHOUSE
+\u{2502}   ├\u{2500}\u{2500} Commands/AdjustFreshRawStock/ Calls warehouse.AdjustStock() \u{2014} only FRESH_RAW
+\u{2502}   \u{2514}\u{2500}\u{2500} Queries/GetWarehouseReport/  \u{2192} WarehouseReportDto[] with StockStatus
+├\u{2500}\u{2500} Receipt/
+\u{2502}   ├\u{2500}\u{2500} Commands/CreateReceipt/      Validates INHOUSE blocked, same manufacturer, adds stock
+\u{2502}   \u{2514}\u{2500}\u{2500} Commands/DeleteReceipt/      Restores all stock from detail lines
+├\u{2500}\u{2500} Table/
+\u{2502}   ├\u{2500}\u{2500} Commands/CreateTable/
+\u{2502}   ├\u{2500}\u{2500} Commands/UpdateTableStatus/
+\u{2502}   \u{2514}\u{2500}\u{2500} Queries/GetTables/
+├\u{2500}\u{2500} Reservation/
+\u{2502}   ├\u{2500}\u{2500} Commands/CreateReservation/  Calls table.Reserve() \u{2014} throws if not AVAILABLE
+\u{2502}   ├\u{2500}\u{2500} Commands/ConfirmReservation/
+\u{2502}   ├\u{2500}\u{2500} Commands/CancelReservation/
+\u{2502}   \u{2514}\u{2500}\u{2500} Commands/CompleteReservation/
+├\u{2500}\u{2500} Order/
+\u{2502}   ├\u{2500}\u{2500} Commands/CreateOrder/
+\u{2502}   ├\u{2500}\u{2500} Commands/AddOrderItem/       FRESH_RAW check + stock deduction \u{2190} CRITICAL
+\u{2502}   ├\u{2500}\u{2500} Commands/RemoveOrderItem/    Stock restore
+\u{2502}   ├\u{2500}\u{2500} Commands/CompleteOrder/
+\u{2502}   \u{2514}\u{2500}\u{2500} Commands/CancelOrder/        Restores ALL item stock atomically
+├\u{2500}\u{2500} Invoice/
+\u{2502}   ├\u{2500}\u{2500} Commands/CreateInvoice/      Order must be COMPLETED
+\u{2502}   ├\u{2500}\u{2500} Commands/ApplyDiscount/      Validate code + atomic used_count increment
+\u{2502}   \u{2514}\u{2500}\u{2500} Commands/PayInvoice/
+├\u{2500}\u{2500} DiscountCode/
+\u{2502}   ├\u{2500}\u{2500} Commands/CreateDiscountCode/
+\u{2502}   ├\u{2500}\u{2500} Commands/ToggleDiscountCode/
+\u{2502}   \u{2514}\u{2500}\u{2500} Queries/ValidateDiscountCode/
+├\u{2500}\u{2500} Review/
+\u{2502}   ├\u{2500}\u{2500} Commands/CreateReview/       Invoice must be PAID
+\u{2502}   \u{2514}\u{2500}\u{2500} Commands/AddReviewReply/
+├\u{2500}\u{2500} Customer/
+\u{2502}   ├\u{2500}\u{2500} Commands/UpdateCustomer/
+\u{2502}   \u{2514}\u{2500}\u{2500} Queries/GetCustomerById/
+├\u{2500}\u{2500} Staff/
+\u{2502}   ├\u{2500}\u{2500} Commands/CreateStaff/        BCrypt hash password
+\u{2502}   \u{2514}\u{2500}\u{2500} Commands/ToggleStaff/
+\u{2514}\u{2500}\u{2500} Manufacturer/
+    ├\u{2500}\u{2500} Commands/CreateManufacturer/
+    \u{2514}\u{2500}\u{2500} Queries/GetManufacturers/
+
+=== SqlConnectionFactory.cs — verify correct setup ===
+// RestaurantMS.Infrastructure/Data/SqlConnectionFactory.cs
+public class SqlConnectionFactory
+{
+    private readonly string _cs;
+    public SqlConnectionFactory(IConfiguration config)
+        => _cs = config.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException("DefaultConnection not configured.");
+
+    public async Task<SqlConnection> CreateConnectionAsync()
+    {
+        var conn = new SqlConnection(_cs);
+        await conn.OpenAsync();
+        return conn;
+    }
+}
+
+=== FBRepository.cs — GetMenuAsync + InsertAndReturnIdAsync ===
+// RestaurantMS.Infrastructure/Repositories/FBRepository.cs
+public class FBRepository : IFBRepository
+{
+    private readonly SqlConnectionFactory _factory;
+    public FBRepository(SqlConnectionFactory factory) => _factory = factory;
+
+    public async Task<FB?> GetByIdAsync(long id)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"SELECT fb_id, name, price, type, category_id,
+                   manufacturer_id, is_visible, unit, description
+            FROM fb WHERE fb_id = @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await using var r = await cmd.ExecuteReaderAsync();
+        return r.HasRows && await r.ReadAsync() ? MapFB(r) : null;
+    }
+
+    // Excludes FRESH_RAW always; INHOUSE excluded unless includeInhouse=true
+    public async Task<IEnumerable<FB>> GetMenuAsync(bool includeInhouse = false)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = includeInhouse
+            ? "SELECT * FROM fb WHERE type != 'FRESH_RAW' AND is_visible = 1"
+            : "SELECT * FROM fb WHERE type = 'REGULAR' AND is_visible = 1";
+        await using var r = await cmd.ExecuteReaderAsync();
+        var list = new List<FB>();
+        while (await r.ReadAsync()) list.Add(MapFB(r));
+        return list;
+    }
+
+    public async Task<long> InsertAndReturnIdAsync(FB entity)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            INSERT INTO fb (name,price,type,category_id,manufacturer_id,is_visible,unit,description)
+            OUTPUT INSERTED.fb_id
+            VALUES (@Name,@Price,@Type,@CatId,@MfgId,@Vis,@Unit,@Desc)";
+        cmd.Parameters.AddWithValue("@Name",  entity.Name);
+        cmd.Parameters.AddWithValue("@Price", entity.Price);
+        cmd.Parameters.AddWithValue("@Type",  entity.Type.ToString());
+        cmd.Parameters.AddWithValue("@CatId", entity.CategoryId);
+        cmd.Parameters.AddWithValue("@MfgId", (object?)entity.ManufacturerId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Vis",   entity.IsVisible);
+        cmd.Parameters.AddWithValue("@Unit",  (object?)entity.Unit ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Desc",  (object?)entity.Description ?? DBNull.Value);
+        return (long)(await cmd.ExecuteScalarAsync())!;
+    }
+
+    private static FB MapFB(SqlDataReader r) => new()
+    {
+        FBId           = r.GetInt64(r.GetOrdinal("fb_id")),
+        Name           = r.GetString(r.GetOrdinal("name")),
+        Price          = r.GetDecimal(r.GetOrdinal("price")),
+        Type           = Enum.Parse<FBType>(r.GetString(r.GetOrdinal("type"))),
+        CategoryId     = r.GetInt64(r.GetOrdinal("category_id")),
+        ManufacturerId = r.IsDBNull(r.GetOrdinal("manufacturer_id")) ? null
+                         : r.GetInt64(r.GetOrdinal("manufacturer_id")),
+        IsVisible      = r.GetBoolean(r.GetOrdinal("is_visible")),
+    };
+}
+
+=== WarehouseRepository.cs — GetByFBIdAsync + UpdateQuantityAsync + GetReportAsync ===
+// RestaurantMS.Infrastructure/Repositories/WarehouseRepository.cs
+public class WarehouseRepository : IWarehouseRepository
+{
+    public async Task<Warehouse?> GetByFBIdAsync(long fbId)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT w.warehouse_id, w.fb_id, f.type AS fb_type,
+                   w.quantity, w.low_stock_threshold
+            FROM warehouse w INNER JOIN fb f ON f.fb_id = w.fb_id
+            WHERE w.fb_id = @FBId";
+        cmd.Parameters.AddWithValue("@FBId", fbId);
+        await using var r = await cmd.ExecuteReaderAsync();
+        return r.HasRows && await r.ReadAsync() ? MapWarehouse(r) : null;
+    }
+
+    public async Task UpdateQuantityAsync(long fbId, int newQuantity)
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE warehouse SET quantity = @Qty WHERE fb_id = @FBId";
+        cmd.Parameters.AddWithValue("@Qty",  newQuantity);
+        cmd.Parameters.AddWithValue("@FBId", fbId);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task<IEnumerable<WarehouseReportRow>> GetReportAsync()
+    {
+        await using var conn = await _factory.CreateConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT f.fb_id, f.name, f.type, w.quantity, w.low_stock_threshold,
+                   CASE WHEN w.quantity = 0 THEN 'OUT_OF_STOCK'
+                        WHEN w.quantity <= w.low_stock_threshold THEN 'LOW_STOCK'
+                        ELSE 'NORMAL' END AS stock_status
+            FROM warehouse w INNER JOIN fb f ON f.fb_id = w.fb_id
+            ORDER BY
+                CASE WHEN w.quantity = 0 THEN 0
+                     WHEN w.quantity <= w.low_stock_threshold THEN 1 ELSE 2 END, f.name";
+        await using var r = await cmd.ExecuteReaderAsync();
+        var list = new List<WarehouseReportRow>();
+        while (await r.ReadAsync())
+            list.Add(new WarehouseReportRow(
+                r.GetInt64(0), r.GetString(1),
+                Enum.Parse<FBType>(r.GetString(2)),
+                r.GetInt32(3), r.GetInt32(4),
+                Enum.Parse<StockStatus>(r.GetString(5))));
+        return list;
+    }
+}
+
+=== All 16 repositories — implementation checklist ===
+// MOST CRITICAL HANDLER \u{2014} enforces 3 domain rules simultaneously
+public class AddOrderItemCommandHandler : IRequestHandler<AddOrderItemCommand, OrderItemDto>
+{
+    private readonly IUnitOfWork _uow;
+    public AddOrderItemCommandHandler(IUnitOfWork uow) => _uow = uow;
+
+    public async Task<OrderItemDto> Handle(AddOrderItemCommand cmd, CancellationToken ct)
+    {
+        // 1. Load \u{2014} throw NotFoundException if missing
+        var order = await _uow.Orders.GetByIdAsync(cmd.OrderId)
+            ?? throw new NotFoundException(nameof(RestaurantOrder), cmd.OrderId);
+        var fb = await _uow.FBs.GetByIdAsync(cmd.FBId)
+            ?? throw new NotFoundException(nameof(FB), cmd.FBId);
+        var warehouse = await _uow.Warehouses.GetByFBIdAsync(cmd.FBId)
+            ?? throw new NotFoundException(nameof(Warehouse), cmd.FBId);
+
+        // 2. Domain invariants (throw typed domain exceptions)
+        if (!fb.IsSellable())              // FRESH_RAW check lives in FB.IsSellable()
+            throw new FreshRawCannotBeSoldException(fb.Name);
+        if (!order.CanAddItem())
+            throw new DomainException($"Cannot add items to a '{order.Status}' order.");
+
+        // 3. Deduct stock \u{2014} REGULAR: throws StockCannotGoNegativeException if qty < 0
+        warehouse.DeductStock(cmd.Quantity, fb.Name);
+
+        // 4. Create OrderItem
+        var item = new OrderItem { OrderId = cmd.OrderId, FBId = cmd.FBId,
+            Quantity = cmd.Quantity, UnitPrice = fb.Price };
+
+        // 5. Persist atomically \u{2014} SINGLE transaction
+        await _uow.BeginTransactionAsync(ct);
+        try
+        {
+            item.OrderItemId = await _uow.OrderItems.InsertAndReturnIdAsync(item);
+            await _uow.Warehouses.UpdateQuantityAsync(fb.FBId, warehouse.Quantity);
+            await _uow.CommitAsync(ct);
+        }
+        catch { await _uow.RollbackAsync(ct); throw; }
+
+        // 6. Return DTO \u{2014} NEVER the entity
+        return new OrderItemDto(item.OrderItemId, fb.Name, item.Quantity, item.UnitPrice);
+    }
+}
+
+=== CancelOrderCommandHandler — restore ALL item stock atomically ===
+public class CancelOrderCommandHandler : IRequestHandler<CancelOrderCommand, Unit>
+{
+    public async Task<Unit> Handle(CancelOrderCommand cmd, CancellationToken ct)
+    {
+        var order = await _uow.Orders.GetByIdAsync(cmd.OrderId)
+            ?? throw new NotFoundException(nameof(RestaurantOrder), cmd.OrderId);
+
+        order.Cancel(); // throws DomainException if status == COMPLETED
+
+        var items = await _uow.OrderItems.GetByOrderIdAsync(cmd.OrderId);
+
+        await _uow.BeginTransactionAsync(ct);
+        try
+        {
+            foreach (var item in items)
+            {
+                var wh = await _uow.Warehouses.GetByFBIdAsync(item.FBId);
+                if (wh != null)
+                {
+                    wh.RestoreStock(item.Quantity);
+                    await _uow.Warehouses.UpdateQuantityAsync(item.FBId, wh.Quantity);
+                }
+            }
+            await _uow.Orders.UpdateStatusAsync(cmd.OrderId, OrderStatus.CANCELLED);
+            await _uow.CommitAsync(ct);
+        }
+        catch { await _uow.RollbackAsync(ct); throw; }
+
+        return Unit.Value;
+    }
+}
+
+=== CreateInvoiceCommandHandler — order must be COMPLETED ===
+public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand, InvoiceDto>
+{
+    public async Task<InvoiceDto> Handle(CreateInvoiceCommand cmd, CancellationToken ct)
+    {
+        var order = await _uow.Orders.GetWithItemsAsync(cmd.OrderId)
+            ?? throw new NotFoundException(nameof(RestaurantOrder), cmd.OrderId);
+
+        // Enforce 1 invoice per order
+        var existing = await _uow.Invoices.GetByOrderIdAsync(cmd.OrderId);
+        if (existing != null)
+            throw new DomainException($"Order {cmd.OrderId} already has an invoice.");
+
+        var subtotal = order.Items.Sum(i => i.Quantity * i.UnitPrice);
+
+        // Domain factory \u{2014} throws InvoiceRequiresCompletedOrderException if not COMPLETED
+        var invoice = Invoice.Create(order, subtotal);
+
+        await _uow.BeginTransactionAsync(ct);
+        try
+        {
+            invoice.InvoiceId = await _uow.Invoices.InsertAndReturnIdAsync(invoice);
+            await _uow.CommitAsync(ct);
+        }
+        catch { await _uow.RollbackAsync(ct); throw; }
+
+        return new InvoiceDto(invoice.InvoiceId, invoice.OrderId,
+            invoice.Subtotal, 0, invoice.Subtotal, "UNPAID");
+    }
+}
+
+=== ApplyDiscountCommandHandler — validate code + atomic used_count increment ===
+public class ApplyDiscountCommandHandler : IRequestHandler<ApplyDiscountCommand, InvoiceDto>
+{
+    public async Task<InvoiceDto> Handle(ApplyDiscountCommand cmd, CancellationToken ct)
+    {
+        var invoice = await _uow.Invoices.GetByIdAsync(cmd.InvoiceId)
+            ?? throw new NotFoundException(nameof(Invoice), cmd.InvoiceId);
+        var code = await _uow.DiscountCodes.GetByCodeAsync(cmd.DiscountCode)
+            ?? throw new NotFoundException("DiscountCode", cmd.DiscountCode);
+
+        // All validation before any DB write
+        if (!code.IsActive)          throw new DomainException("Discount code is not active.");
+        if (code.ExpiresAt < DateTime.UtcNow) throw new DomainException("Discount code has expired.");
+        if (code.MaxUses > 0 && code.UsedCount >= code.MaxUses)
+            throw new DomainException("Discount code usage limit reached.");
+        if (invoice.Subtotal < code.MinOrderAmount)
+            throw new DomainException($"Minimum order for this code is {code.MinOrderAmount:N0}.");
+
+        var discountAmt = code.DiscountType == DiscountType.PERCENT
+            ? invoice.Subtotal * code.Value / 100m : code.Value;
+        if (code.MaxDiscountAmount > 0)
+            discountAmt = Math.Min(discountAmt, code.MaxDiscountAmount);
+
+        invoice.ApplyDiscount(discountAmt);
+        invoice.DiscountCodeId = code.DiscountCodeId;
+
+        await _uow.BeginTransactionAsync(ct);
+        try
+        {
+            await _uow.Invoices.UpdateAsync(invoice);
+            await _uow.DiscountCodes.IncrementUsedCountAsync(code.DiscountCodeId); // atomic
+            await _uow.CommitAsync(ct);
+        }
+        catch { await _uow.RollbackAsync(ct); throw; }
+
+        return new InvoiceDto(invoice.InvoiceId, invoice.OrderId,
+            invoice.Subtotal, invoice.DiscountAmount, invoice.Total, "UNPAID");
+    }
+}
+
+=== CreateReceiptCommandHandler — INHOUSE blocked + auto stock add ===
+public class CreateReceiptCommandHandler : IRequestHandler<CreateReceiptCommand, ReceiptDto>
+{
+    public async Task<ReceiptDto> Handle(CreateReceiptCommand cmd, CancellationToken ct)
+    {
+        await _uow.Manufacturers.GetByIdAsync(cmd.ManufacturerId)
+            ?? throw new NotFoundException(nameof(Manufacturer), cmd.ManufacturerId);
+
+        await _uow.BeginTransactionAsync(ct);
+        try
+        {
+            var receipt = new Receipt { ManufacturerId = cmd.ManufacturerId,
+                StaffId = _currentUser.UserId!.Value, ImportedAt = DateTime.UtcNow };
+            receipt.ReceiptId = await _uow.Receipts.InsertAndReturnIdAsync(receipt);
+
+            foreach (var line in cmd.Items)
+            {
+                var fb = await _uow.FBs.GetByIdAsync(line.FBId)
+                    ?? throw new NotFoundException(nameof(FB), line.FBId);
+
+                // Domain rule: INHOUSE forbidden + same manufacturer enforced
+                Receipt.ValidateItem(fb, cmd.ManufacturerId);
+
+                await _uow.ReceiptDetails.InsertAndReturnIdAsync(new ReceiptDetail {
+                    ReceiptId = receipt.ReceiptId, FBId = line.FBId,
+                    Quantity = line.Quantity, UnitPrice = line.UnitPrice });
+
+                // Auto-add stock after import
+                var wh = await _uow.Warehouses.GetByFBIdAsync(line.FBId);
+                if (wh != null) {
+                    wh.AddStock(line.Quantity);
+                    await _uow.Warehouses.UpdateQuantityAsync(line.FBId, wh.Quantity);
+                }
+            }
+            await _uow.CommitAsync(ct);
+            return new ReceiptDto(receipt.ReceiptId, cmd.ManufacturerId, receipt.ImportedAt);
+        }
+        catch { await _uow.RollbackAsync(ct); throw; }
+    }
+}
+
+=== CreateReviewCommandHandler — invoice must be PAID ===
+public class CreateReviewCommandHandler : IRequestHandler<CreateReviewCommand, ReviewDto>
+{
+    public async Task<ReviewDto> Handle(CreateReviewCommand cmd, CancellationToken ct)
+    {
+        var invoice = await _uow.Invoices.GetByIdAsync(cmd.InvoiceId)
+            ?? throw new NotFoundException(nameof(Invoice), cmd.InvoiceId);
+
+        // Enforce 1 review per invoice
+        if (await _uow.Reviews.ExistsByInvoiceIdAsync(cmd.InvoiceId))
+            throw new DomainException("This invoice already has a review.");
+
+        // Domain factory: throws ReviewRequiresPaidInvoiceException if not PAID
+        var review = Review.Create(invoice, _currentUser.UserId!.Value, cmd.Stars, cmd.Content);
+
+        review.ReviewId = await _uow.Reviews.InsertAndReturnIdAsync(review);
+        return new ReviewDto(review.ReviewId, cmd.InvoiceId, review.Stars, review.Content);
+    }
+}
+
+=== REWRITE ExceptionHandlingMiddleware.cs — map all typed exceptions ===
+// RestaurantMS.API/Middleware/ExceptionHandlingMiddleware.cs
+// BEFORE: only 3 generic exceptions mapped
+// AFTER: full mapping of all business exceptions
+
+public async Task InvokeAsync(HttpContext ctx)
+{
+    try { await _next(ctx); }
+    catch (Exception ex) { await HandleAsync(ctx, ex); }
+}
+
+private async Task HandleAsync(HttpContext ctx, Exception ex)
+{
+    _logger.LogError(ex, "Unhandled: {Message}", ex.Message);
+
+    var (status, code, message) = ex switch
+    {
+        // Business rule violations \u{2192} 422 Unprocessable Entity
+        FreshRawCannotBeSoldException e    => (422, "FRESH_RAW_CANNOT_BE_SOLD",          e.Message),
+        StockCannotGoNegativeException e   => (422, "INSUFFICIENT_STOCK",                e.Message),
+        InhouseCannotBeImportedException e => (422, "INHOUSE_IMPORT_FORBIDDEN",          e.Message),
+        ReviewRequiresPaidInvoiceException e => (422, "REVIEW_REQUIRES_PAID_INVOICE",    e.Message),
+        InvoiceRequiresCompletedOrderException e => (422, "INVOICE_REQUIRES_COMPLETED",  e.Message),
+        TableNotAvailableException e       => (422, "TABLE_NOT_AVAILABLE",               e.Message),
+        DomainException e                  => (422, "DOMAIN_RULE_VIOLATION",             e.Message),
+
+        // Application
+        ValidationException e => (400, "VALIDATION_ERROR",
+                                  string.Join("; ", e.Errors)),
+        NotFoundException e   => (404, "NOT_FOUND", e.Message),
+        ForbiddenException e  => (403, "FORBIDDEN",  e.Message),
+
+        // Auth
+        UnauthorizedAccessException e => (401, "UNAUTHORIZED", e.Message),
+
+        // Fallback
+        _ => (500, "INTERNAL_ERROR", "An unexpected error occurred.")
+    };
+
+    ctx.Response.StatusCode  = status;
+    ctx.Response.ContentType = "application/json";
+    await ctx.Response.WriteAsJsonAsync(new
+    {
+        success = false,
+        error   = new { code, message }
+    });
+}
+
+=== Fix Program.cs — remove WAITER, correct pipeline order ===
+// RestaurantMS.API/Program.cs
+
+builder.Services.AddAuthorization(opts =>
+{
+    // MANAGER: manages staff, receipts, discount codes, menu CRUD
+    opts.AddPolicy("ManagerOnly",   p => p.RequireRole("MANAGER"));
+    // Both staff roles: orders, invoices, table status, warehouse
+    opts.AddPolicy("StaffOnly",     p => p.RequireRole("MANAGER", "ADMIN"));
+    // Customers: reservations, reviews, view own orders/invoices
+    opts.AddPolicy("CustomerOnly",  p => p.RequireRole("CUSTOMER"));
+});
+
+// \u{2500}\u{2500} Middleware pipeline \u{2014} ORDER IS CRITICAL \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
+app.UseMiddleware<ExceptionHandlingMiddleware>(); // 1. catch ALL exceptions
+app.UseAuthentication();                          // 2. parse JWT \u{2192} ClaimsPrincipal
+app.UseAuthorization();                           // 3. enforce [Authorize] attributes
+app.UseCors("AllowFrontend");                     // 4. CORS headers
+app.MapControllers();                             // 5. route to controllers
+
+=== UPDATE Infrastructure/DependencyInjection.cs — remove EF Core completely ===
+// RestaurantMS.Infrastructure/DependencyInjection.cs
+// BEFORE: had services.AddDbContext<AppDbContext>(options => options.UseSqlServer(...))
+// AFTER: only raw SQL
+
+public static IServiceCollection AddInfrastructure(
+    this IServiceCollection services, IConfiguration config)
+{
+    services.AddSingleton<SqlConnectionFactory>(); // shared, thread-safe
+
+    // UnitOfWork: Scoped \u{2014} one per HTTP request, wraps all 16 repos
+    services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+    // Application-layer service implementations
+    services.AddScoped<IJwtTokenService, JwtTokenService>();
+    services.AddScoped<IPasswordHasher,  BcryptPasswordHasher>();
+    services.AddScoped<IDateTimeService, DateTimeService>();
+
+    services.AddHttpContextAccessor();
+    services.AddScoped<ICurrentUserService, CurrentUserService>();
+
+    return services;
+}
+
+=== AuthController.cs — staff login + customer register/login ===
+// [Route("api/auth")] [ApiController]
+public class AuthController : ControllerBase
+{
+    private readonly IMediator _m;
+    public AuthController(IMediator m) => _m = m;
+
+    [HttpPost("staff/login")]                     // No [Authorize] \u{2014} public endpoint
+    public async Task<IActionResult> StaffLogin(
+        [FromBody] LoginStaffCommand cmd, CancellationToken ct)
+        => Ok(await _m.Send(cmd, ct));
+
+    [HttpPost("customer/register")]               // Public
+    public async Task<IActionResult> CustomerRegister(
+        [FromBody] RegisterCustomerCommand cmd, CancellationToken ct)
+        => Ok(await _m.Send(cmd, ct));
+
+    [HttpPost("customer/login")]                  // Public
+    public async Task<IActionResult> CustomerLogin(
+        [FromBody] LoginCustomerCommand cmd, CancellationToken ct)
+        => Ok(await _m.Send(cmd, ct));
+}
+
+=== RestaurantOrderController.cs — full order lifecycle ===
+// [Route("api/orders")] [ApiController] [Authorize(Policy = "StaffOnly")]
+public class RestaurantOrderController : ControllerBase
+{
+    private readonly IMediator _m;
+    public RestaurantOrderController(IMediator m) => _m = m;
+
+    [HttpPost]
+    public async Task<IActionResult> Create(
+        [FromBody] CreateOrderCommand cmd, CancellationToken ct)
+        => Ok(await _m.Send(cmd, ct));
+
+    [HttpPost("{orderId}/items")]
+    public async Task<IActionResult> AddItem(long orderId,
+        [FromBody] AddOrderItemRequest req, CancellationToken ct)
+        => Ok(await _m.Send(new AddOrderItemCommand(orderId, req.FBId, req.Quantity), ct));
+
+    [HttpDelete("{orderId}/items/{itemId}")]
+    public async Task<IActionResult> RemoveItem(long orderId, long itemId, CancellationToken ct)
+    {
+        await _m.Send(new RemoveOrderItemCommand(orderId, itemId), ct);
+        return NoContent();
+    }
+
+    [HttpPut("{orderId}/complete")]
+    public async Task<IActionResult> Complete(long orderId, CancellationToken ct)
+    {
+        await _m.Send(new CompleteOrderCommand(orderId), ct);
+        return NoContent();
+    }
+
+    [HttpDelete("{orderId}")]
+    public async Task<IActionResult> Cancel(long orderId, CancellationToken ct)
+    {
+        await _m.Send(new CancelOrderCommand(orderId), ct);
+        return NoContent();
+    }
+
+    [HttpGet("{orderId}")]
+    public async Task<IActionResult> Get(long orderId, CancellationToken ct)
+        => Ok(await _m.Send(new GetOrderQuery(orderId), ct));
+}
+
+=== All controller route + policy mapping ===
+// frontend/src/domain/enums/index.ts
+// Must exactly match RestaurantMS.Domain/Enums/
+
+export enum FBType {
+  REGULAR   = 'REGULAR',
+  INHOUSE   = 'INHOUSE',
+  FRESH_RAW = 'FRESH_RAW',
+}
+export enum OrderStatus {
+  PENDING = 'PENDING', SERVING = 'SERVING',
+  COMPLETED = 'COMPLETED', CANCELLED = 'CANCELLED',
+}
+export enum InvoiceStatus {
+  UNPAID = 'UNPAID', PAID = 'PAID', REFUNDED = 'REFUNDED',
+}
+export enum ReservationStatus {
+  PENDING = 'PENDING', CONFIRMED = 'CONFIRMED',
+  COMPLETED = 'COMPLETED', CANCELLED = 'CANCELLED', NO_SHOW = 'NO_SHOW',
+}
+export enum TableStatus {
+  AVAILABLE = 'AVAILABLE', OCCUPIED = 'OCCUPIED',
+  RESERVED = 'RESERVED', MAINTENANCE = 'MAINTENANCE',
+}
+export enum StaffRole {
+  MANAGER = 'MANAGER',
+  ADMIN   = 'ADMIN',
+  // NO 'WAITER' \u{2014} that role does not exist in the business spec
+}
+export enum MemberTier  { NORMAL='NORMAL', SILVER='SILVER', GOLD='GOLD', VIP='VIP' }
+export enum StockStatus { NORMAL='NORMAL', LOW_STOCK='LOW_STOCK', OUT_OF_STOCK='OUT_OF_STOCK' }
+export enum PaymentMethod { CASH='CASH', CARD='CARD', QR='QR', TRANSFER='TRANSFER' }
+export enum DiscountType  { PERCENT='PERCENT', FIXED='FIXED' }
+
+=== CREATE domain/entities/ — typed interfaces for all 16 entities ===
+// frontend/src/domain/entities/fb.entity.ts
+import type { FBType } from '../enums'
+export interface FB {
+  fbId: number; name: string; price: number; type: FBType;
+  categoryId: number; manufacturerId?: number; isVisible: boolean;
+  unit?: string; description?: string;
+}
+
+// frontend/src/domain/entities/order.entity.ts
+import type { OrderStatus } from '../enums'
+import type { OrderItem }   from './order-item.entity'
+export interface Order {
+  orderId: number; tableId: number; reservationId?: number;
+  customerId?: number; status: OrderStatus; createdAt: string; items?: OrderItem[];
+}
+
+// frontend/src/domain/entities/order-item.entity.ts
+export interface OrderItem {
+  orderItemId: number; orderId: number; fbId: number;
+  fbName: string; quantity: number; unitPrice: number;
+}
+
+// frontend/src/domain/entities/invoice.entity.ts
+import type { InvoiceStatus, PaymentMethod } from '../enums'
+export interface Invoice {
+  invoiceId: number; orderId: number; subtotal: number;
+  discountAmount: number; total: number; status: InvoiceStatus;
+  paymentMethod?: PaymentMethod; discountCodeId?: number; cashierId?: number; paidAt?: string;
+}
+
+// frontend/src/domain/entities/table-reservation.entity.ts
+import type { ReservationStatus } from '../enums'
+export interface TableReservation {
+  reservationId: number; customerId: number; tableId: number;
+  reservedAt: string; guestCount: number; notes?: string; status: ReservationStatus;
+}
+
+// Also create: category.entity.ts, manufacturer.entity.ts, warehouse.entity.ts,
+// table.entity.ts, receipt.entity.ts, receipt-detail.entity.ts,
+// discount-code.entity.ts, review.entity.ts, review-reply.entity.ts,
+// customer.entity.ts, staff.entity.ts
+
+=== CREATE domain/rules/ — pure functions, zero Vue imports ===
+// frontend/src/domain/rules/fb.rules.ts  \u{2190} NO Vue import allowed in domain/
+import type { FB } from '../entities/fb.entity'
+import { FBType } from '../enums'
+
+export const isSellable    = (fb: FB): boolean => fb.type !== FBType.FRESH_RAW && fb.isVisible
+export const isMenuVisible = (fb: FB): boolean => fb.type !== FBType.FRESH_RAW && fb.isVisible
+
+// frontend/src/domain/rules/order.rules.ts
+import type { Order } from '../entities/order.entity'
+import { OrderStatus } from '../enums'
+
+export const canAddItem      = (o: Order) => o.status === OrderStatus.PENDING || o.status === OrderStatus.SERVING
+export const canCreateInvoice= (o: Order) => o.status === OrderStatus.COMPLETED
+export const canCancel       = (o: Order) => o.status !== OrderStatus.COMPLETED
+
+// frontend/src/domain/rules/invoice.rules.ts
+import type { Invoice } from '../entities/invoice.entity'
+import { InvoiceStatus } from '../enums'
+
+export const canPay           = (inv: Invoice) => inv.status === InvoiceStatus.UNPAID
+export const canReview        = (inv: Invoice) => inv.status === InvoiceStatus.PAID
+export const canApplyDiscount = (inv: Invoice) => inv.status === InvoiceStatus.UNPAID
+
+// frontend/src/domain/rules/reservation.rules.ts
+import type { TableReservation } from '../entities/table-reservation.entity'
+import { ReservationStatus } from '../enums'
+
+// FIX from ClientOrderPage.vue: was checking 'SERVING', correct is CONFIRMED
+export const canCreateOrder = (r: TableReservation): boolean =>
+  r.status === ReservationStatus.CONFIRMED
+
+=== CREATE services/api.client.ts — Axios + JWT interceptor + error normalizer ===
+// frontend/src/services/api.client.ts
+import axios, { type AxiosResponse } from 'axios'
+
+const apiClient = axios.create({
+  baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:5158/api',
+  timeout: 10_000,
+  headers: { 'Content-Type': 'application/json' },
+})
+
+// Attach JWT from localStorage on every request
+apiClient.interceptors.request.use(config => {
+  const token = localStorage.getItem('token')
+  if (token) config.headers.Authorization = \
+
+=== CREATE services/auth.service.ts — fully typed staff + customer auth ===
+// frontend/src/services/auth.service.ts
+import apiClient from './api.client'
+import type { StaffRole, MemberTier } from '@/domain/enums'
+
+export interface StaffAuthDto {
+  staffId: number; fullName: string; role: StaffRole; token: string;
+}
+export interface CustomerAuthDto {
+  customerId: number; fullName: string; phone: string;
+  email?: string; membershipLevel: MemberTier; token: string;
+}
+export interface LoginStaffRequest    { email: string; password: string }
+export interface LoginCustomerRequest { phone: string; password: string }
+export interface RegisterCustomerRequest {
+  fullName: string; phone: string; password: string;
+  email?: string; gender?: string; address?: string;
+}
+
+export const authService = {
+  loginStaff:       (b: LoginStaffRequest)       => apiClient.post<StaffAuthDto>('/auth/staff/login',        b).then(r => r.data),
+  loginCustomer:    (b: LoginCustomerRequest)     => apiClient.post<CustomerAuthDto>('/auth/customer/login',  b).then(r => r.data),
+  registerCustomer: (b: RegisterCustomerRequest)  => apiClient.post<CustomerAuthDto>('/auth/customer/register',b).then(r => r.data),
+}
+
+=== CREATE services/order.service.ts — typed order CRUD ===
+// frontend/src/services/order.service.ts
+import apiClient from './api.client'
+import type { Order }     from '@/domain/entities/order.entity'
+import type { OrderItem } from '@/domain/entities/order-item.entity'
+
+export interface CreateOrderPayload { tableId: number; reservationId?: number; customerId?: number }
+export interface AddItemPayload     { fbId: number; quantity: number }
+
+export const orderService = {
+  create:     (b: CreateOrderPayload)         => apiClient.post<Order>('/orders', b).then(r => r.data),
+  getById:    (id: number)                    => apiClient.get<Order>(\
+
+=== All 13 service files to create — typed pattern ===
+// frontend/src/services/
+// api.client.ts         \u{2190} \u{2713} done
+// auth.service.ts       \u{2190} \u{2713} done
+// order.service.ts      \u{2190} \u{2713} done
+// menu.service.ts       \u{2192} getFBMenu(), createFB(payload), updateFB(id, payload), deleteFB(id)
+// category.service.ts   \u{2192} getAll(), create(name), update(id, name), delete(id)
+// manufacturer.service.ts \u{2192} getAll(), create(payload), update(id, payload)
+// warehouse.service.ts  \u{2192} getReport(), adjustStock(fbId, qty)
+// receipt.service.ts    \u{2192} create(manufacturerId, items[]), delete(receiptId)
+// table.service.ts      \u{2192} getAll(), create(payload), updateStatus(id, status)
+// reservation.service.ts \u{2192} create(payload), getMyReservations(), confirm(id), cancel(id)
+// invoice.service.ts    \u{2192} create(orderId), applyDiscount(invoiceId, code), pay(invoiceId, method)
+// discount.service.ts   \u{2192} getAll(), create(payload), toggle(id), validate(code)
+// review.service.ts     \u{2192} create(invoiceId, stars, content), addReply(reviewId, content)
+// customer.service.ts   \u{2192} getAll(), getById(id), update(id, data)
+// staff.service.ts      \u{2192} getAll(), create(payload), toggle(id)
+
+// ALL RULES:
+// \u{2713} import apiClient from './api.client'
+// \u{2713} All request payloads are named typed interfaces (never inline objects)
+// \u{2713} Return types reference domain entity interfaces
+// \u{2717} NEVER use [key: string]: any
+
+=== REWRITE stores/auth.store.ts — real JWT, role computed properties ===
+// frontend/src/stores/auth.store.ts
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+import { authService } from '@/services/auth.service'
+import { StaffRole } from '@/domain/enums'
+import type { StaffAuthDto, CustomerAuthDto, LoginStaffRequest,
+              LoginCustomerRequest, RegisterCustomerRequest } from '@/services/auth.service'
+
+type AuthUser = (StaffAuthDto & { kind: 'staff' }) | (CustomerAuthDto & { kind: 'customer' }) | null
+
+export const useAuthStore = defineStore('auth', () => {
+  const token = ref<string | null>(localStorage.getItem('token'))
+  const user  = ref<AuthUser>(JSON.parse(localStorage.getItem('authUser') ?? 'null') as AuthUser)
+
+  const isLoggedIn = computed(() => !!token.value)
+  const isStaff    = computed(() => user.value?.kind === 'staff')
+  const isCustomer = computed(() => user.value?.kind === 'customer')
+  const isManager  = computed(() => user.value?.kind === 'staff' && user.value.role === StaffRole.MANAGER)
+  const isAdmin    = computed(() => user.value?.kind === 'staff' && user.value.role === StaffRole.ADMIN)
+
+  function persist(t: string, u: AuthUser) {
+    token.value = t; user.value = u;
+    localStorage.setItem('token',    t)
+    localStorage.setItem('authUser', JSON.stringify(u))
+  }
+
+  async function loginStaff(p: LoginStaffRequest) {
+    const d = await authService.loginStaff(p)
+    persist(d.token, { ...d, kind: 'staff' })
+    return d
+  }
+  async function loginCustomer(p: LoginCustomerRequest) {
+    const d = await authService.loginCustomer(p)
+    persist(d.token, { ...d, kind: 'customer' })
+    return d
+  }
+  async function registerCustomer(p: RegisterCustomerRequest) {
+    const d = await authService.registerCustomer(p)
+    persist(d.token, { ...d, kind: 'customer' })
+    return d
+  }
+  function logout() {
+    token.value = null; user.value = null;
+    localStorage.removeItem('token'); localStorage.removeItem('authUser')
+  }
+
+  return { token, user, isLoggedIn, isStaff, isCustomer, isManager, isAdmin,
+           loginStaff, loginCustomer, registerCustomer, logout }
+})
+
+=== CREATE composables/useOrder.ts — domain rule checks before API calls ===
+// frontend/src/composables/useOrder.ts
+import { ref, computed } from 'vue'
+import { orderService }  from '@/services/order.service'
+import { canAddItem, canCreateInvoice, canCancel } from '@/domain/rules/order.rules'
+import { isSellable } from '@/domain/rules/fb.rules'
+import type { Order }     from '@/domain/entities/order.entity'
+import type { FB }        from '@/domain/entities/fb.entity'
+import { useNotificationStore } from '@/stores/notification.store'
+import type { CreateOrderPayload } from '@/services/order.service'
+
+export function useOrder(initialOrderId?: number) {
+  const order   = ref<Order | null>(null)
+  const loading = ref(false)
+  const notify  = useNotificationStore()
+
+  const itemsTotal    = computed(() => order.value?.items?.reduce((s, i) => s + i.quantity * i.unitPrice, 0) ?? 0)
+  const isServable    = computed(() => order.value ? canAddItem(order.value)        : false)
+  const isCompletable = computed(() => order.value ? canCreateInvoice(order.value)  : false)
+  const isCancellable = computed(() => order.value ? canCancel(order.value)          : false)
+
+  async function load(id: number) {
+    loading.value = true
+    try { order.value = await orderService.getById(id) }
+    finally { loading.value = false }
+  }
+
+  async function create(payload: CreateOrderPayload) {
+    loading.value = true
+    try { order.value = await orderService.create(payload); return order.value }
+    finally { loading.value = false }
+  }
+
+  async function addItem(fb: FB, quantity: number) {
+    if (!order.value) return
+    // Client-side domain rule check before hitting API (fast feedback)
+    if (!isSellable(fb))        { notify.error('This item cannot be sold.'); return }
+    if (!canAddItem(order.value)){ notify.error(\
+
+=== CREATE stores/notification.store.ts — replaces toast service ===
+// frontend/src/stores/notification.store.ts
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+
+export type NotificationLevel = 'success' | 'error' | 'info' | 'warning'
+export interface Notification { id: number; message: string; level: NotificationLevel }
+
+export const useNotificationStore = defineStore('notification', () => {
+  const notifications = ref<Notification[]>([])
+  let seq = 0
+
+  function push(message: string, level: NotificationLevel) {
+    const id = ++seq
+    notifications.value.push({ id, message, level })
+    setTimeout(() => { notifications.value = notifications.value.filter(n => n.id !== id) }, 4000)
+  }
+
+  return {
+    notifications,
+    success: (msg: string) => push(msg, 'success'),
+    error:   (msg: string) => push(msg, 'error'),
+    info:    (msg: string) => push(msg, 'info'),
+    warning: (msg: string) => push(msg, 'warning'),
+  }
+})
+
+=== All composables to create — domain rule check pattern ===
+// frontend/src/composables/
+// useOrder.ts         \u{2190} \u{2713} done above
+// useMenu.ts          \u{2192} load items, filter by isSellable(), CRUD (manager)
+// useWarehouse.ts     \u{2192} loadReport(), adjustStock() \u{2014} INHOUSE vs FRESH_RAW
+// useReceipt.ts       \u{2192} createReceipt(mfgId, items[]), listReceipts()
+// useTable.ts         \u{2192} loadTables(), updateStatus(id, status)
+// useReservation.ts   \u{2192} create(), getMyReservations(), confirm(), cancel()
+// useInvoice.ts       \u{2192} create (canCreateInvoice check), applyDiscount, pay (canPay check)
+// useReview.ts        \u{2192} create (canReview check), addReply
+// useCustomer.ts      \u{2192} getById(), update()
+// useStaff.ts         \u{2192} getAll(), create(), toggle() \u{2014} Manager-only UI
+// useDiscount.ts      \u{2192} validate(), create(), toggle()
+
+// KEY RULE for every composable:
+// Before calling a service write method, check the domain rule:
+async function pay(invoiceId: number, method: PaymentMethod) {
+  const inv = invoice.value
+  if (!inv || !canPay(inv)) {         // \u{2190} domain rule check
+    notify.error('Invoice cannot be paid in its current state.')
+    return
+  }
+  await invoiceService.pay(invoiceId, { method })
+}
+
+=== REWRITE router/guards.ts — use real auth store ===
+// frontend/src/router/guards.ts
+import type { NavigationGuardNext, RouteLocationNormalized } from 'vue-router'
+import { useAuthStore } from '@/stores/auth.store'
+
+export function requireAuth(_to: RouteLocationNormalized, _from: RouteLocationNormalized, next: NavigationGuardNext) {
+  const auth = useAuthStore()
+  if (!auth.isLoggedIn) return next({ name: 'Login', query: { redirect: _to.fullPath } })
+  next()
+}
+export function requireStaff(_to: RouteLocationNormalized, _from: RouteLocationNormalized, next: NavigationGuardNext) {
+  if (!useAuthStore().isStaff) return next({ name: 'Forbidden' })
+  next()
+}
+export function requireManager(_to: RouteLocationNormalized, _from: RouteLocationNormalized, next: NavigationGuardNext) {
+  if (!useAuthStore().isManager) return next({ name: 'Forbidden' })
+  next()
+}
+export function requireCustomer(_to: RouteLocationNormalized, _from: RouteLocationNormalized, next: NavigationGuardNext) {
+  if (!useAuthStore().isCustomer) return next({ name: 'ClientLogin' })
+  next()
+}
+
+// router/index.ts \u{2014} apply guards
+const routes = [
+  { path: '/staff/login',     name: 'Login',         component: () => import('@/pages/staff/StaffLoginPage.vue') },
+  { path: '/login',           name: 'ClientLogin',   component: () => import('@/pages/client/ClientLoginPage.vue') },
+  {
+    path: '/',
+    component: () => import('@/layouts/AppLayout.vue'),
+    beforeEnter: requireAuth,
+    children: [
+      { path: 'dashboard',   name: 'Dashboard',    component: () => import('@/pages/dashboard/DashboardPage.vue') },
+      { path: 'menu',        name: 'Menu',         component: () => import('@/pages/menu/MenuPage.vue') },
+      { path: 'tables',      name: 'Tables',       component: () => import('@/pages/tables/TablesPage.vue') },
+      { path: 'orders/:id',  name: 'Order',        component: () => import('@/pages/orders/OrderPage.vue') },
+      { path: 'invoices/:id',name: 'Invoice',      component: () => import('@/pages/invoices/InvoicePage.vue') },
+      { path: 'warehouse',   name: 'Warehouse',    component: () => import('@/pages/warehouse/WarehousePage.vue') },
+      { path: 'staff',       name: 'Staff',        component: () => import('@/pages/staff/StaffPage.vue'),       beforeEnter: requireManager },
+      { path: 'receipts',    name: 'Receipts',     component: () => import('@/pages/warehouse/ReceiptsPage.vue'), beforeEnter: requireManager },
+    ]
+  }
+]
+
+=== FIX ClientOrderPage.vue — 3 bugs: inline factories + wrong status + wrong import ===
+// frontend/src/pages/client/ClientOrderPage.vue
+// BUG 1 \u{2014} Inline composable factory calls inside async functions (FORBIDDEN):
+// BEFORE: const loadMenu = async () => { menuItems.value = await useFb().list() }
+// BEFORE: const currentReservation = await useReservation().get(reservationId)
+// BUG 2 \u{2014} Wrong reservation status check:
+// BEFORE: if (currentReservation.status !== 'SERVING') { ... }
+// BUG 3 \u{2014} Magic string instead of enum
+
+// AFTER \u{2014} ALL THREE BUGS FIXED:
+<script setup lang="ts">
+import { onMounted, computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useOrder }       from '@/composables/useOrder'          // \u{2713} initialized in setup()
+import { useMenu }        from '@/composables/useMenu'           // \u{2713} initialized in setup()
+import { useReservation } from '@/composables/useReservation'    // \u{2713} initialized in setup()
+import { canCreateOrder } from '@/domain/rules/reservation.rules'// \u{2713} uses domain rule
+import { isSellable }     from '@/domain/rules/fb.rules'
+import { useNotificationStore } from '@/stores/notification.store'
+
+const route   = useRoute()
+const router  = useRouter()
+const notify  = useNotificationStore()
+
+// \u{2713} All composables initialized ONCE in setup scope
+const menu        = useMenu()
+const reservation = useReservation()
+const order       = useOrder()
+
+const sellableItems = computed(() => menu.items.value.filter(isSellable))
+
+onMounted(async () => {
+  const reservationId = Number(route.query.reservationId)
+  if (!reservationId) {
+    notify.error('Please select a valid reservation first.')
+    router.push('/my-reservations')
+    return
+  }
+
+  await reservation.loadById(reservationId)
+  const res = reservation.current.value
+
+  // \u{2713} FIXED: correct domain rule, correct status (CONFIRMED not SERVING)
+  if (!res || !canCreateOrder(res)) {
+    notify.error('Orders can only be placed for CONFIRMED reservations.')
+    router.push('/my-reservations')
+    return
+  }
+
+  await menu.loadMenu()
+  await order.create({ tableId: res.tableId, reservationId: res.reservationId })
+})
+
+async function addItem(fb: FB, qty: number) {
+  await order.addItem(fb, qty)  // isSellable check happens inside useOrder
+}
+</script>
+
+=== FIX ClientLoginPage.vue — use real store method names ===
+// frontend/src/pages/client/ClientLoginPage.vue
+// BEFORE: auth.signIn(values)  \u{2190} method does not exist on store
+// AFTER:
+
+const auth = useAuthStore()
+
+const submitSignIn = async (values: { phone: string; password: string }) => {
+  try {
+    await auth.loginCustomer(values)          // \u{2190} real method name
+    notify.success('Welcome back!')
+    router.replace(redirectAfterLogin || '/')
+  } catch (err: any) {
+    notify.error(err.message ?? 'Login failed.')  // \u{2190} from Axios interceptor
+  }
+}
+
+const submitRegister = async (values: RegisterCustomerRequest) => {
+  try {
+    await auth.registerCustomer(values)
+    notify.success('Account created!')
+    router.replace('/')
+  } catch (err: any) {
+    notify.error(err.message ?? 'Registration failed.')
+  }
+}
+
+=== CREATE ReviewForm.vue — locked by canReview() domain rule ===
+// frontend/src/components/features/ReviewForm.vue
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import type { Invoice } from '@/domain/entities/invoice.entity'
+import { canReview }    from '@/domain/rules/invoice.rules'
+import { useReview }    from '@/composables/useReview'
+
+const props  = defineProps<{ invoice: Invoice }>()
+const review = useReview()
+
+// Domain rule gates the entire form \u{2014} not a UI-level hack
+const reviewAllowed = computed(() => canReview(props.invoice))
+const stars   = ref(5)
+const content = ref('')
+
+async function submit() {
+  if (!reviewAllowed.value) return       // double guard
+  await review.create(props.invoice.invoiceId, stars.value, content.value)
+}
+</script>
+
+<template>
+  <section class="review-section">
+    <!-- Show locked message until invoice is PAID -->
+    <div v-if="!reviewAllowed" class="review-locked">
+      Review becomes available after payment is completed.
+    </div>
+    <form v-else @submit.prevent="submit">
+      <!-- star picker + textarea -->
+      <button type="submit">Submit Review</button>
+    </form>
+  </section>
+</template>
+

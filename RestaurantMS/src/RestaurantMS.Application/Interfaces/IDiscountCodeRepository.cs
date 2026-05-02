@@ -11,5 +11,6 @@ public interface IDiscountCodeRepository
     Task AddAsync(DiscountCode entity);
     Task UpdateAsync(DiscountCode entity);
     Task DeleteAsync(long id);
+    Task<DiscountCode?> GetByCodeAsync(string code);
+    Task IncrementUsedCountAsync(long discountCodeId);
 }
-

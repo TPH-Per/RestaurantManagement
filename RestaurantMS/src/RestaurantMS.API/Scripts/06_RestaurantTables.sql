@@ -1,0 +1,1 @@
+CREATE TABLE RestaurantTables ( table_id BIGINT IDENTITY(1,1) PRIMARY KEY, status NVARCHAR(20) NOT NULL, capacity INT NOT NULL );

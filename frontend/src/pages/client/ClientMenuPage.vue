@@ -1,10 +1,15 @@
+import { categoryService } from '@/services/category.service';
+import { menuService } from '@/services/menu.service';
+import { orderService } from '@/services/order.service';
+import { reservationService } from '@/services/reservation.service';
+import { invoiceService } from '@/services/invoice.service';
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { useI18n } from 'vue-i18n'
-import { useReservation, useAuth, useCustomer, useMenuItem, useTable, useOrder, useUser, useCategory, useSupplier, usePurchaseOrder, useInventoryItem, useOrderItem, useInvoice, usePayment, useShift, useFb, useDiscounts, useStaff, useManufacturers, useReceipts, useDashboard, useReviews } from '@/composables/useAll'
+
 import { toast } from '../../services/toast'
 import { useClientAuthStore } from '../../stores/clientAuth'
 import { useReservationStore } from '../../stores/reservation'
@@ -37,8 +42,8 @@ const activeCategory = computed(() => categories.value[activeIndex.value] || nul
 const activeItems = computed(() => items.value.filter((item) => item.category_id === activeCategory.value?.category_id))
 
 const load = async () => {
-  categories.value = await useCategory().list()
-  items.value = await useFb().list({ type: 'All' })
+  categories.value = await await categoryService.getAll()
+  items.value = await await menuService.getFBMenu(true)
 }
 
 const showIntro = async () => {

@@ -5,12 +5,13 @@ import { useI18n } from 'vue-i18n'
 import { Form, Field, ErrorMessage } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
-import { useClientAuthStore } from '../../stores/clientAuth'
-import { toast } from '../../services/toast'
+import { useAuthStore } from '../../stores/auth.store'
+import { useNotificationStore } from '../../stores/notification.store'
 
 const router = useRouter()
 const { t } = useI18n()
-const auth = useClientAuthStore()
+const auth = useAuthStore()
+const notify = useNotificationStore()
 const mode = ref('signin')
 const showPassword = ref(false)
 const redirectAfterLogin = window.history.state?.redirectAfterLogin || '/'
@@ -40,27 +41,29 @@ const registerSchema = computed(() =>
   )
 )
 
-const submitSignIn = async (values, { resetForm }) => {
+const submitSignIn = async (values: any) => {
   try {
-    const customer = await auth.signIn(values)
-    toast.success(t('auth.welcomeBackMessage', { name: customer.full_name }))
+    await auth.loginCustomer(values)
+    notify.success('Welcome back!')
     router.replace(redirectAfterLogin || '/')
-  } catch {
-    toast.error(t('auth.phoneError'))
-  } finally {
-    resetForm()
+  } catch (err: any) {
+    notify.error(err.message ?? 'Login failed.')
   }
 }
 
-const submitRegister = async (values, { resetForm }) => {
+const submitRegister = async (values: any) => {
   try {
-    await auth.register(values)
-    toast.success(t('auth.accountCreatedMessage'))
-    router.replace('/reserve')
-  } catch (error) {
-    toast.error(error.message || t('auth.unableCreateAccount'))
-  } finally {
-    resetForm()
+    await auth.registerCustomer({
+        fullName: values.full_name,
+        phone: values.phone,
+        password: values.password,
+        gender: values.gender,
+        address: values.address
+    })
+    notify.success('Account created!')
+    router.replace('/')
+  } catch (err: any) {
+    notify.error(err.message ?? 'Registration failed.')
   }
 }
 </script>

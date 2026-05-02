@@ -1,0 +1,1 @@
+CREATE TABLE Manufacturers ( manufacturer_id BIGINT IDENTITY(1,1) PRIMARY KEY, name NVARCHAR(100) NOT NULL, address NVARCHAR(255), phone NVARCHAR(20) );

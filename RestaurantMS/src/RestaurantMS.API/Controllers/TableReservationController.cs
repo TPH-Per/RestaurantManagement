@@ -1,18 +1,28 @@
 using Microsoft.AspNetCore.Mvc;
-using RestaurantMS.API.Common;
-using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using RestaurantMS.Application.Features.Reservation.Queries;
 
 namespace RestaurantMS.API.Controllers;
 
+[Route("api/reservations")]
 [ApiController]
-[Route("api/[controller]")]
+[Authorize(Policy = "CustomerOnly")]
 public class TableReservationController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    public TableReservationController(IMediator mediator) { _mediator = mediator; }
+    private readonly IMediator _m;
+    public TableReservationController(IMediator m) => _m = m;
 
-    [HttpGet]
-    public async Task<IActionResult> Get() => Ok(ApiResponse<string>.Ok("Success"));
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateReservationDto cmd, CancellationToken ct) => Ok(new { ReservationId = 1 });
+
+    [HttpGet("all")]
+    [Authorize(Policy = "StaffOnly")]
+    public async Task<IActionResult> GetAll(CancellationToken ct)
+        => Ok(await _m.Send(new GetAllReservationsQuery(), ct));
+
+    public class CreateReservationDto { public int TableId { get; set; } public DateTime ReservedAt { get; set; } public int GuestCount { get; set; } }
 }
-

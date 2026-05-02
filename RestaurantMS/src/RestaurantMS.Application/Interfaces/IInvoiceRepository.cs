@@ -11,5 +11,6 @@ public interface IInvoiceRepository
     Task AddAsync(Invoice entity);
     Task UpdateAsync(Invoice entity);
     Task DeleteAsync(long id);
+    Task<Invoice?> GetByOrderIdAsync(long orderId);
+    Task<long> InsertAndReturnIdAsync(Invoice invoice);
 }
-

@@ -1,0 +1,1 @@
+CREATE TABLE OrderItems ( order_item_id BIGINT IDENTITY(1,1) PRIMARY KEY, order_id BIGINT NOT NULL, item_id BIGINT NOT NULL, quantity INT NOT NULL, unit_price DECIMAL(18,2) NOT NULL );

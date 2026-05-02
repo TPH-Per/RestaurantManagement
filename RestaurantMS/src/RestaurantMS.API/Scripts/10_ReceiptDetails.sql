@@ -1,0 +1,1 @@
+CREATE TABLE ReceiptDetails ( receipt_detail_id BIGINT IDENTITY(1,1) PRIMARY KEY, receipt_id BIGINT NOT NULL, item_id BIGINT NOT NULL, quantity INT NOT NULL, import_price DECIMAL(18,2) NOT NULL );

@@ -1,0 +1,1 @@
+CREATE TABLE Invoices ( invoice_id BIGINT IDENTITY(1,1) PRIMARY KEY, order_id BIGINT NOT NULL, subtotal DECIMAL(18,2) NOT NULL, discount_amount DECIMAL(18,2) NOT NULL, total DECIMAL(18,2) NOT NULL, status NVARCHAR(20) NOT NULL, payment_method NVARCHAR(20), discount_code_id BIGINT, cashier_id BIGINT, paid_at DATETIME2 );

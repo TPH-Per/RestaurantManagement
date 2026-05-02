@@ -1,0 +1,1 @@
+CREATE TABLE Reviews ( review_id BIGINT IDENTITY(1,1) PRIMARY KEY, invoice_id BIGINT NOT NULL, customer_id BIGINT NOT NULL, stars INT NOT NULL, content NVARCHAR(1000) NOT NULL, created_at DATETIME2 NOT NULL );

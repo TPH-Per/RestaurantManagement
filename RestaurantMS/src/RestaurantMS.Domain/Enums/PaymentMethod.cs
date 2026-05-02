@@ -2,7 +2,9 @@ namespace RestaurantMS.Domain.Enums;
 
 public enum PaymentMethod
 {
-    None = 0,
-    Active = 1
+    CASH = 0,
+    CARD = 1,
+    QR = 2,
+    TRANSFER = 3
 }
 

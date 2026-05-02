@@ -1,0 +1,1 @@
+CREATE TABLE DiscountCodes ( discount_code_id BIGINT IDENTITY(1,1) PRIMARY KEY, code NVARCHAR(50) NOT NULL, discount_type NVARCHAR(10) NOT NULL, discount_value DECIMAL(18,2) NOT NULL, min_order_amount DECIMAL(18,2), max_discount_amount DECIMAL(18,2), valid_from DATETIME2 NOT NULL, valid_to DATETIME2 NOT NULL, usage_limit INT, used_count INT NOT NULL, is_active BIT NOT NULL );

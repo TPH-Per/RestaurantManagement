@@ -1,7 +1,12 @@
+import { categoryService } from '@/services/category.service';
+import { menuService } from '@/services/menu.service';
+import { orderService } from '@/services/order.service';
+import { reservationService } from '@/services/reservation.service';
+import { invoiceService } from '@/services/invoice.service';
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import dayjs from 'dayjs'
-import { useReservation, useAuth, useCustomer, useMenuItem, useTable, useOrder, useUser, useCategory, useSupplier, usePurchaseOrder, useInventoryItem, useOrderItem, useInvoice, usePayment, useShift, useFb, useDiscounts, useStaff, useManufacturers, useReceipts, useDashboard, useReviews } from '@/composables/useAll'
+
 import { toast } from '../../services/toast'
 import { useClientAuthStore } from '../../stores/clientAuth'
 import { useRouter } from 'vue-router'
@@ -18,7 +23,7 @@ const load = async () => {
   invoice.value = await useInvoice().get(props.invoiceId)
   review.value = await useReviews().getByInvoice(props.invoiceId)
   const staffList = await useStaff().list()
-  menuItems.value = await useFb().list()
+  menuItems.value = await await menuService.getFBMenu(false)
   if (!invoice.value || String(invoice.value.customer_id) !== String(auth.customerId)) {
     toast.error('You can only view your own invoice.')
     router.replace('/my-invoices')
